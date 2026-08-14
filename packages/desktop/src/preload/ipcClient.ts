@@ -166,7 +166,30 @@ const health: HealthApi = {
   },
 };
 
-const client: Client = { connections, browser, query, data, designer, erd, transfer, settings, events, health };
+const windowApi = {
+  openPopout: (input: {
+    type: 'query' | 'table';
+    title: string;
+    connectionId?: string;
+    tabId?: string;
+    sql?: string;
+    table?: string;
+  }) => invoke<{ opened: boolean }>(IPC_CHANNELS.windowOpenPopout, input),
+};
+
+const client: Client = {
+  connections,
+  browser,
+  query,
+  data,
+  designer,
+  erd,
+  transfer,
+  settings,
+  events,
+  health,
+  window: windowApi,
+};
 
 export function exposeClient(): void {
   contextBridge.exposeInMainWorld('canvabase', client);
