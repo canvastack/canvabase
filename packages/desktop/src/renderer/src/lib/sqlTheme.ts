@@ -25,14 +25,14 @@ export const SQL_THEME_PRESETS: SqlThemePreset[] = [
     id: 'canvabase-indigo',
     name: 'CanvaBase Indigo (Default)',
     colors: {
-      keyword: '#818cf8', // Soft Indigo / Violet
-      function: '#fbbf24', // Amber
-      string: '#34d399', // Emerald
-      number: '#f472b6', // Pink
-      comment: '#6b7194', // Slate Muted
+      keyword: '#60a5fa', // Vivid Sky Blue
+      function: '#fbbf24', // Amber Gold
+      string: '#34d399', // Emerald Green
+      number: '#f472b6', // Vivid Pink
+      comment: '#94a3b8', // Slate Muted
       operator: '#c084fc', // Purple
-      identifier: '#e6e8f2', // Light primary
-      selection: 'rgba(99, 102, 241, 0.35)',
+      identifier: '#f8fafc', // Bright White
+      selection: 'rgba(99, 102, 241, 0.4)',
     },
   },
   {
