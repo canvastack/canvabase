@@ -15,6 +15,18 @@ coverage/
 # Logs
 *.log
 
+# Compressed files (archives, backups, etc)
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.rar
+*.7z
+*.gz
+*.bz2
+*.xz
+
 # OS junk
 .DS_Store
 Thumbs.db
