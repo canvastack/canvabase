@@ -5325,6 +5325,20 @@ body {
   position: relative;
 }
 
+/* Popout Real Multi-Window Header (Native Draggable Titlebar) */
+.cb-popout-header {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.cb-popout-header button,
+.cb-popout-header input,
+.cb-popout-header select,
+.cb-popout-header a,
+.cb-popout-header .no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* Detached Workspace Layout */
 .cb-detached-workspace {
   display: flex;
