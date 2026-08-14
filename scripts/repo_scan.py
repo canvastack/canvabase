@@ -43,7 +43,10 @@ def git(args: list, cwd: Path) -> str:
 
 
 def is_git_repo(path: Path) -> bool:
-    return (path / ".git").exists() or git(["rev-parse", "--git-dir"], path) != ""
+    # Repo asli = folder yang memiliki .git sendiri (dir atau file worktree).
+    # JANGAN pakai `git rev-parse --git-dir` saja: saat root adalah git repo,
+    # subfolder apa pun akan "menemukan" .git di parent → false positive.
+    return (path / ".git").exists()
 
 
 def scan() -> dict:
