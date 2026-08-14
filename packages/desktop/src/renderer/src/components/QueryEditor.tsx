@@ -307,7 +307,7 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
           +
         </button>
 
-        {/* Fullscreen / Detach / Results Toggle Buttons in Tab Bar */}
+        {/* Fullscreen / Detach / Results Toggle / New Window Buttons in Tab Bar */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 8 }}>
           {isDetached && (
             <button
@@ -323,10 +323,26 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
             className="cb-action-btn"
             style={{ padding: '3px 8px', fontSize: 11 }}
             onClick={() => {
+              void client.window?.openPopout({
+                type: 'query',
+                title: tab.title,
+                connectionId: activeConnectionId || '',
+                tabId: tab.id,
+                sql: tab.sql,
+              });
+            }}
+            title="Open in a Separate Real Native OS Window (Taskbar Separated / Monitor 2)"
+          >
+            🗗 New Window
+          </button>
+          <button
+            className="cb-action-btn"
+            style={{ padding: '3px 8px', fontSize: 11 }}
+            onClick={() => {
               setIsDetached((v) => !v);
               setIsFullscreen(true);
             }}
-            title={isDetached ? 'Dock back to main GUI layout' : 'Fullscreen / Popout Workspace'}
+            title={isDetached ? 'Dock back to main GUI layout' : 'Maximize / Fullscreen In-App'}
           >
             {isDetached ? '🗗 Dock' : '⛶ Fullscreen'}
           </button>
