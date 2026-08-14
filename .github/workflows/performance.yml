@@ -1,0 +1,39 @@
+name: performance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  perf-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build packages + desktop
+        run: npm run build
+
+      - name: Size-limit gate
+        run: npx size-limit
+
+      - name: Memory budget gate (idle <200MB, grid <400MB)
+        run: npm run measure
+
+      - name: Grid benchmark (fps + heap)
+        run: npm run test -- tests/performance
+
+      - name: Upload perf results
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: .perf/results.json
+          if-no-files-found: warn
