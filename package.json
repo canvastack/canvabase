@@ -1,0 +1,44 @@
+{
+  "name": "canvabase",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CanvaBase — cross-platform database management desktop app (MySQL, PostgreSQL, SQLite)",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build --workspace packages/shared && npm run build --workspace packages/contracts && npm run build --workspace packages/dialects",
+    "dev": "npm run dev --workspace packages/desktop",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc -b",
+    "measure": "node scripts/measure-memory.mjs all",
+    "measure:idle": "node scripts/measure-memory.mjs idle",
+    "measure:grid": "node scripts/measure-memory.mjs grid",
+    "package": "npm run build:packages && npm run package --workspace packages/desktop"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@size-limit/preset-app": "^13.0.3",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "electron": "^33.2.1",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^17.10.0",
+    "prettier": "^3.4.2",
+    "size-limit": "^11.1.6",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

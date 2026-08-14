@@ -1,0 +1,27 @@
+# Performance benchmark artifacts
+.perf/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+dist-package/
+release/
+coverage/
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Environment & secrets
+.env
+.env.local
+
+# Historical audit docs (archived via waypoint WOs)
+docs/audit

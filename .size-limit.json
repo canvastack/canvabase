@@ -1,0 +1,14 @@
+[
+  {
+    "name": "renderer-main",
+    "path": "packages/desktop/out/renderer/assets/index-*.js",
+    "limit": "200 kB",
+    "gzip": true
+  },
+  {
+    "name": "renderer-erd",
+    "path": "packages/desktop/out/renderer/assets/ErdScreen-*.js",
+    "limit": "200 kB",
+    "gzip": true
+  }
+]
