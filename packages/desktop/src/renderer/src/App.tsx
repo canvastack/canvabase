@@ -14,6 +14,8 @@ import { ConnectionModal } from './components/ConnectionModal';
 import { ExportModal } from './components/ExportModal';
 import { ImportModal } from './components/ImportModal';
 import { SettingsModal, applyAccent, applyBgColor, getSavedBgColor, computeAutoHoverColor, applyAppOpacity } from './components/SettingsModal';
+import { initPersistedFonts } from './lib/fontManager';
+import { applySavedSqlTheme } from './lib/sqlTheme';
 import type { ConnectionSummary } from '@canvabase/contracts';
 
 import logoUrl from './assets/logo.png';
@@ -52,7 +54,7 @@ export function App(): JSX.Element {
     return () => clearTimeout(timer);
   }, []);
 
-  // Theme, Accent, Background & Opacity Initialization hook
+  // Theme, Accent, Background, Opacity, Font & SQL Syntax Theme Initialization hook
   useEffect(() => {
     const theme = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
@@ -73,6 +75,10 @@ export function App(): JSX.Element {
     if (savedOpacity) {
       applyAppOpacity(Number(savedOpacity));
     }
+
+    // Initialize Fonts and SQL Syntax Colors
+    void initPersistedFonts();
+    applySavedSqlTheme();
 
     void store.getState().refreshConnections();
   }, [store]);
