@@ -20,12 +20,19 @@ import type { ConnectionSummary } from '@canvabase/contracts';
 
 import logoUrl from './assets/logo.png';
 
+import { PopoutWorkspace } from './components/PopoutWorkspace';
+
 const ErdScreen = lazy(() =>
   import('./components/ErdScreen').then((m) => ({ default: m.ErdScreen }))
 );
 
 export function App(): JSX.Element {
   const client = useClient();
+
+  if (typeof window !== 'undefined' && window.location.hash.startsWith('#/popout')) {
+    return <PopoutWorkspace client={client} />;
+  }
+
   const [store] = useState<AppStore>(() => createAppStore(client));
   const activeView = store((s) => s.activeView);
   const activeConnectionId = store((s) => s.activeConnectionId);
