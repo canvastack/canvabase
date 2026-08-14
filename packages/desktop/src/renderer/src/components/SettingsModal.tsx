@@ -1,5 +1,21 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import type { AppStore } from '../store';
+import {
+  getAvailableFonts,
+  importGoogleFont,
+  uploadLocalFontFile,
+  getSavedTypography,
+  applyFontSettings,
+  type FontTypographySettings,
+} from '../lib/fontManager';
+import {
+  SQL_THEME_PRESETS,
+  getSavedSqlTheme,
+  getSavedSqlThemePresetId,
+  applySqlTheme,
+  type SqlThemeColors,
+} from '../lib/sqlTheme';
+import { highlightSql } from '../lib/sqlHighlighter';
 
 interface SettingsModalProps {
   store?: AppStore;
@@ -68,11 +84,6 @@ function hslToHex(h: number, s: number, l: number): string {
     return Math.round(255 * color).toString(16).padStart(2, '0');
   };
   return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-export function isColorDark(hex: string): boolean {
-  const { l } = hexToHsl(hex);
-  return l < 50;
 }
 
 export function computeAutoHoverColor(hex: string): string {
@@ -144,35 +155,14 @@ export function applyBgColor(baseHex: string, mode: 'dark' | 'light' | 'system')
   }
 }
 
-export function clearCustomBgColor() {
-  document.documentElement.style.removeProperty('--bg-app');
-  document.documentElement.style.removeProperty('--bg-surface');
-  document.documentElement.style.removeProperty('--bg-surface-hover');
-  document.documentElement.style.removeProperty('--bg-input');
-  document.documentElement.style.removeProperty('--border');
-  document.documentElement.style.removeProperty('--text-primary');
-  document.documentElement.style.removeProperty('--text-secondary');
-  document.documentElement.style.removeProperty('--text-muted');
-  localStorage.removeItem('cb_dark_bg_color');
-  localStorage.removeItem('cb_light_bg_color');
-}
-
 export function applyAppOpacity(percent: number) {
   const decimal = Math.max(0.4, Math.min(1, percent / 100));
   const blurPx = Math.round((1 - decimal) * 20);
   document.documentElement.style.setProperty('--cb-surface-opacity', String(decimal));
   document.documentElement.style.setProperty('--cb-glass-blur', `${blurPx}px`);
   localStorage.setItem('cb_app_opacity', String(percent));
-
-  try {
-    const electron = (window as unknown as { canvabase?: { events?: { emit: (channel: string, data: unknown) => void } } }).canvabase;
-    electron?.events?.emit('canvabase:window:setOpacity', decimal);
-  } catch {
-    // browser test mode
-  }
 }
 
-/** Profil tema yang bisa di-export/import sebagai JSON (PRD-NFR-01 theme save/load). */
 export interface ThemeProfile {
   version: 1;
   name?: string;
@@ -182,8 +172,13 @@ export interface ThemeProfile {
   bgColor: string;
   appOpacity: number;
   density: 'compact' | 'comfortable';
-  uiFont: string;
-  monoFont: string;
+  typography?: FontTypographySettings;
+  sqlTheme?: {
+    presetId?: string;
+    colors: SqlThemeColors;
+  };
+  uiFont?: string;
+  monoFont?: string;
   toolbarDisplayStyle: 'both' | 'icon' | 'text';
 }
 
@@ -196,9 +191,14 @@ function readLocalStorageProfile(): ThemeProfile {
     accentHoverColor: localStorage.getItem('cb_accent_hover_color') || '#818cf8',
     bgColor: getSavedBgColor(mode),
     appOpacity: parseInt(localStorage.getItem('cb_app_opacity') || '100', 10),
-    density: 'comfortable',
-    uiFont: 'Inter',
-    monoFont: 'JetBrains Mono',
+    density: (localStorage.getItem('data-density') as 'compact' | 'comfortable') || 'comfortable',
+    typography: getSavedTypography(),
+    sqlTheme: {
+      presetId: getSavedSqlThemePresetId(),
+      colors: getSavedSqlTheme(),
+    },
+    uiFont: localStorage.getItem('cb_ui_font') || 'Inter',
+    monoFont: localStorage.getItem('cb_mono_font') || 'JetBrains Mono',
     toolbarDisplayStyle: (localStorage.getItem('cb_toolbar_display_style') as 'both' | 'icon' | 'text') || 'both',
   };
 }
@@ -219,8 +219,25 @@ export function applyThemeProfile(profile: ThemeProfile) {
   localStorage.setItem('data-density', profile.density ?? 'comfortable');
   document.documentElement.setAttribute('data-density', profile.density ?? 'comfortable');
 
-  if (profile.uiFont) localStorage.setItem('cb_ui_font', profile.uiFont);
-  if (profile.monoFont) localStorage.setItem('cb_mono_font', profile.monoFont);
+  if (profile.typography) {
+    applyFontSettings(profile.typography);
+  } else {
+    const partial: Partial<FontTypographySettings> = {};
+    if (profile.uiFont) {
+      localStorage.setItem('cb_ui_font', profile.uiFont);
+      partial.uiFont = profile.uiFont;
+    }
+    if (profile.monoFont) {
+      localStorage.setItem('cb_mono_font', profile.monoFont);
+      partial.monoFont = profile.monoFont;
+    }
+    applyFontSettings(partial);
+  }
+
+  if (profile.sqlTheme) {
+    applySqlTheme(profile.sqlTheme.colors, profile.sqlTheme.presetId);
+  }
+
   if (profile.toolbarDisplayStyle) localStorage.setItem('cb_toolbar_display_style', profile.toolbarDisplayStyle);
 }
 
@@ -273,8 +290,20 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
   });
 
   const [density, setDensity] = useState<'compact' | 'comfortable'>('comfortable');
-  const [uiFont, setUiFont] = useState('Inter');
-  const [monoFont, setMonoFont] = useState('JetBrains Mono');
+
+  // Typography state
+  const [typography, setTypography] = useState<FontTypographySettings>(getSavedTypography);
+  const [fontList, setFontList] = useState<{ ui: string[]; mono: string[] }>({ ui: [], mono: [] });
+  const [uiFontSearch, setUiFontSearch] = useState(typography.uiFont);
+  const [monoFontSearch, setMonoFontSearch] = useState(typography.monoFont);
+  const [uiFontDropdownOpen, setUiFontDropdownOpen] = useState(false);
+  const [monoFontDropdownOpen, setMonoFontDropdownOpen] = useState(false);
+  const [googleFontInput, setGoogleFontInput] = useState('');
+  const [fontStatus, setFontStatus] = useState<string | null>(null);
+
+  // SQL Theme state
+  const [sqlColors, setSqlColors] = useState<SqlThemeColors>(getSavedSqlTheme);
+  const [sqlPresetId, setSqlPresetId] = useState<string>(getSavedSqlThemePresetId);
 
   const toolbarDisplayStyle = store ? store((s) => s.toolbarDisplayStyle) : 'both';
   const setToolbarDisplayStyle = store ? store((s) => s.setToolbarDisplayStyle) : () => {};
@@ -282,55 +311,46 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
   const [themeStatus, setThemeStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [themeImportError, setThemeImportError] = useState<string | null>(null);
 
-  const handleThemeExport = () => {
-    // Simpan dulu state form ke localStorage agar profil sesuai tampilan saat ini.
-    localStorage.setItem('theme', themeMode);
-    localStorage.setItem('cb_accent_color', accentColor);
-    localStorage.setItem('cb_accent_hover_color', accentHoverColor);
-    applyBgColor(bgColor, themeMode);
-    applyAppOpacity(appOpacity);
-    localStorage.setItem('data-density', density);
-    if (store) store.getState().setToolbarDisplayStyle(toolbarDisplayStyle);
+  const uiDropdownRef = useRef<HTMLDivElement>(null);
+  const monoDropdownRef = useRef<HTMLDivElement>(null);
+  const uiInputRef = useRef<HTMLInputElement>(null);
+  const monoInputRef = useRef<HTMLInputElement>(null);
 
-    downloadThemeProfile();
-    setThemeStatus({ ok: true, message: 'Theme profile exported' });
-  };
-
-  const handleThemeImportFile = async (file: File | undefined) => {
-    if (!file) return;
-    const result = await loadThemeProfileFromFile(file);
-    if (result.ok) {
-      // Refresh local state dari profil yang diimport.
-      setThemeMode((localStorage.getItem('theme') as 'dark' | 'light' | 'system') || 'dark');
-      setAccentColor(localStorage.getItem('cb_accent_color') || '#6366f1');
-      setAccentHoverColor(localStorage.getItem('cb_accent_hover_color') || '#818cf8');
-      setBgColor(getSavedBgColor((localStorage.getItem('theme') as 'dark' | 'light' | 'system') || 'dark'));
-      setAppOpacity(parseInt(localStorage.getItem('cb_app_opacity') || '100', 10));
-      const importedDensity = (localStorage.getItem('data-density') as 'compact' | 'comfortable') || 'comfortable';
-      setDensity(importedDensity);
-      document.documentElement.setAttribute('data-density', importedDensity);
-      const importedToolbar = (localStorage.getItem('cb_toolbar_display_style') as 'both' | 'icon' | 'text') || 'both';
-      if (store) store.getState().setToolbarDisplayStyle(importedToolbar);
-      setThemeImportError(null);
-      setThemeStatus({ ok: true, message: 'Theme profile imported & applied' });
-    } else {
-      setThemeStatus({ ok: false, message: result.error ?? 'Import failed' });
+  const getSelectionHex = (sel: string) => {
+    if (sel.startsWith('#')) return sel.slice(0, 7);
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(sel);
+    if (m && m[1] && m[2] && m[3]) {
+      const r = parseInt(m[1], 10).toString(16).padStart(2, '0');
+      const g = parseInt(m[2], 10).toString(16).padStart(2, '0');
+      const b = parseInt(m[3], 10).toString(16).padStart(2, '0');
+      return `#${r}${g}${b}`;
     }
+    return '#6366f1';
   };
 
-  // Sync initial state on modal open
+  // Load available system & custom fonts on modal open
   useEffect(() => {
-    const savedAccent = localStorage.getItem('cb_accent_color') || '#6366f1';
-    setAccentColor(savedAccent);
-    const savedHover = localStorage.getItem('cb_accent_hover_color') || computeAutoHoverColor(savedAccent);
-    setAccentHoverColor(savedHover);
+    if (isOpen) {
+      void getAvailableFonts().then(setFontList);
+      setTypography(getSavedTypography());
+      setSqlColors(getSavedSqlTheme());
+      setSqlPresetId(getSavedSqlThemePresetId());
+    }
+  }, [isOpen]);
 
-    const savedBg = getSavedBgColor(themeMode);
-    setBgColor(savedBg);
-
-    const savedOpacity = parseInt(localStorage.getItem('cb_app_opacity') || '100', 10);
-    setAppOpacity(savedOpacity);
-  }, [isOpen, themeMode]);
+  // Close font dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (uiDropdownRef.current && !uiDropdownRef.current.contains(e.target as Node)) {
+        setUiFontDropdownOpen(false);
+      }
+      if (monoDropdownRef.current && !monoDropdownRef.current.contains(e.target as Node)) {
+        setMonoFontDropdownOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -341,9 +361,9 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
     applyAccent(hex, autoHover);
   };
 
-  const handleAccentHoverChange = (hoverHex: string) => {
-    setAccentHoverColor(hoverHex);
-    applyAccent(accentColor, hoverHex);
+  const handleAccentHoverChange = (hex: string) => {
+    setAccentHoverColor(hex);
+    applyAccent(accentColor, hex);
   };
 
   const handleBgChange = (hex: string) => {
@@ -354,7 +374,6 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
   const handleThemeModeSwitch = (mode: 'dark' | 'light' | 'system') => {
     setThemeMode(mode);
     document.documentElement.setAttribute('data-theme', mode);
-
     const savedForMode = getSavedBgColor(mode);
     setBgColor(savedForMode);
     applyBgColor(savedForMode, mode);
@@ -365,6 +384,73 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
     applyAppOpacity(val);
   };
 
+  // Typography Handlers
+  const handleTypographyChange = (partial: Partial<FontTypographySettings>) => {
+    const updated = { ...typography, ...partial };
+    setTypography(updated);
+    applyFontSettings(updated);
+  };
+
+  const handleSelectUiFont = (fontName: string) => {
+    setUiFontSearch(fontName);
+    setUiFontDropdownOpen(false);
+    handleTypographyChange({ uiFont: fontName });
+  };
+
+  const handleSelectMonoFont = (fontName: string) => {
+    setMonoFontSearch(fontName);
+    setMonoFontDropdownOpen(false);
+    handleTypographyChange({ monoFont: fontName });
+  };
+
+  const handleImportGoogleFont = async () => {
+    if (!googleFontInput.trim()) return;
+    setFontStatus('Loading Google Font…');
+    const res = await importGoogleFont(googleFontInput.trim());
+    if (res.ok) {
+      setFontStatus(`✅ Loaded Google Font "${res.family}"`);
+      const updated = await getAvailableFonts();
+      setFontList(updated);
+      handleTypographyChange({ monoFont: res.family });
+      setMonoFontSearch(res.family);
+      setGoogleFontInput('');
+    } else {
+      setFontStatus(`❌ Error: ${res.error}`);
+    }
+  };
+
+  const handleUploadLocalFont = async (file: File | undefined) => {
+    if (!file) return;
+    setFontStatus(`Registering font ${file.name}…`);
+    const res = await uploadLocalFontFile(file);
+    if (res.ok) {
+      setFontStatus(`✅ Installed local font "${res.family}"`);
+      const updated = await getAvailableFonts();
+      setFontList(updated);
+      handleTypographyChange({ monoFont: res.family });
+      setMonoFontSearch(res.family);
+    } else {
+      setFontStatus(`❌ Error: ${res.error}`);
+    }
+  };
+
+  // SQL Theme Handlers
+  const handleSqlColorChange = (key: keyof SqlThemeColors, val: string) => {
+    const updated = { ...sqlColors, [key]: val };
+    setSqlColors(updated);
+    setSqlPresetId('custom');
+    applySqlTheme(updated, 'custom');
+  };
+
+  const handleSelectSqlPreset = (presetId: string) => {
+    const preset = SQL_THEME_PRESETS.find((p) => p.id === presetId);
+    if (preset) {
+      setSqlPresetId(preset.id);
+      setSqlColors(preset.colors);
+      applySqlTheme(preset.colors, preset.id);
+    }
+  };
+
   const handleSave = () => {
     localStorage.setItem('theme', themeMode);
     document.documentElement.setAttribute('data-theme', themeMode);
@@ -373,22 +459,69 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
     applyAccent(accentColor, accentHoverColor);
     applyBgColor(bgColor, themeMode);
     applyAppOpacity(appOpacity);
+    applyFontSettings(typography);
+    applySqlTheme(sqlColors, sqlPresetId);
     onClose();
+  };
+
+  const handleThemeExport = () => {
+    localStorage.setItem('theme', themeMode);
+    localStorage.setItem('cb_accent_color', accentColor);
+    localStorage.setItem('cb_accent_hover_color', accentHoverColor);
+    applyBgColor(bgColor, themeMode);
+    applyAppOpacity(appOpacity);
+    applyFontSettings(typography);
+    applySqlTheme(sqlColors, sqlPresetId);
+
+    downloadThemeProfile();
+    setThemeStatus({ ok: true, message: 'Theme & Typography profile exported successfully' });
+  };
+
+  const handleThemeImportFile = async (file: File | undefined) => {
+    if (!file) return;
+    setThemeImportError(null);
+    const res = await loadThemeProfileFromFile(file);
+    if (res.ok) {
+      const mode = (localStorage.getItem('theme') as 'dark' | 'light' | 'system') || 'dark';
+      setThemeMode(mode);
+      setAccentColor(localStorage.getItem('cb_accent_color') || '#6366f1');
+      setAccentHoverColor(localStorage.getItem('cb_accent_hover_color') || '#818cf8');
+      setBgColor(getSavedBgColor(mode));
+      setAppOpacity(parseInt(localStorage.getItem('cb_app_opacity') || '100', 10));
+      setTypography(getSavedTypography());
+      setSqlColors(getSavedSqlTheme());
+      setSqlPresetId(getSavedSqlThemePresetId());
+      setThemeStatus({ ok: true, message: 'Theme profile imported successfully' });
+    } else {
+      setThemeImportError(res.error || 'Failed to import theme');
+    }
   };
 
   const currentBgPresets = themeMode === 'light' ? PRESET_LIGHT_BG_THEMES : PRESET_DARK_BG_THEMES;
 
+  // Filter font lists
+  const filteredUiFonts = fontList.ui.filter((f) =>
+    f.toLowerCase().includes(uiFontSearch.toLowerCase())
+  );
+  const filteredMonoFonts = fontList.mono.filter((f) =>
+    f.toLowerCase().includes(monoFontSearch.toLowerCase())
+  );
+
+  // Live SQL preview sample
+  const sampleSql = `SELECT u.id, u.username, count(o.id) AS total_orders\nFROM users u\nJOIN orders o ON o.user_id = u.id\nWHERE u.status = 'active' AND u.points >= 100\n-- Filter by active tier\nGROUP BY u.id, u.username\nORDER BY total_orders DESC\nLIMIT 50;`;
+  const sampleHighlighted = highlightSql(sampleSql);
+
   return (
     <div className="cb-modal-overlay" onClick={onClose}>
-      <div className="cb-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="cb-modal" style={{ maxWidth: 840, maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
         <div className="cb-modal-header">
-          <div className="cb-modal-title">⚙️ Theme & Settings</div>
+          <div className="cb-modal-title">⚙️ Theme, Typography & SQL IDE Settings</div>
           <button className="cb-close-btn" onClick={onClose}>
             ×
           </button>
         </div>
 
-        <div className="cb-modal-body">
+        <div className="cb-modal-body" style={{ overflowY: 'auto' }}>
           <div className="cb-form-grid">
             {/* Theme Mode */}
             <div className="cb-form-group">
@@ -407,7 +540,7 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
               </select>
             </div>
 
-            {/* Dynamic Accent Color Picker & Auto Hover */}
+            {/* Accent Color Picker */}
             <div className="cb-form-group">
               <label className="cb-label">Accent Color (Auto Adjusts Hover Shade)</label>
               <div className="cb-accent-picker-row">
@@ -440,7 +573,7 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
               </div>
             </div>
 
-            {/* Custom Accent Hover Color Picker */}
+            {/* Accent Hover Color Picker */}
             <div className="cb-form-group">
               <label className="cb-label">Accent Hover Color (Custom Hover Override)</label>
               <div className="cb-accent-picker-row">
@@ -469,7 +602,7 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
               </div>
             </div>
 
-            {/* Dynamic Application Background Base Color */}
+            {/* Background Color Presets */}
             <div className="cb-form-group">
               <label className="cb-label">
                 Application Background Base Color ({themeMode === 'light' ? 'Light Mode Presets' : 'Dark Mode Presets'})
@@ -506,13 +639,12 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
               </div>
             </div>
 
-            {/* Application Opacity Slider */}
-            <div className="cb-form-group">
-              <label className="cb-label">
-                Application Layout Opacity: <strong className="highlight-text">{appOpacity}%</strong>
-              </label>
-              <div className="cb-opacity-slider-row">
-                <span className="text-xs text-muted">40%</span>
+            {/* Opacity & Density */}
+            <div className="cb-form-row">
+              <div className="cb-form-group flex-1">
+                <label className="cb-label">
+                  Layout Opacity: <strong className="highlight-text">{appOpacity}%</strong>
+                </label>
                 <input
                   type="range"
                   min={40}
@@ -522,7 +654,17 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
                   value={appOpacity}
                   onChange={(e) => handleOpacityChange(Number(e.target.value))}
                 />
-                <span className="text-xs text-muted">100% (Solid)</span>
+              </div>
+              <div className="cb-form-group flex-1">
+                <label className="cb-label">Grid Density</label>
+                <select
+                  className="cb-select"
+                  value={density}
+                  onChange={(e) => setDensity(e.target.value as 'compact' | 'comfortable')}
+                >
+                  <option value="compact">Compact (High density, smaller rows)</option>
+                  <option value="comfortable">Comfortable (Standard padding)</option>
+                </select>
               </div>
             </div>
 
@@ -539,51 +681,468 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
               </select>
             </div>
 
-            <div className="cb-form-group">
-              <label className="cb-label">Result Grid Density</label>
-              <select
-                className="cb-select"
-                value={density}
-                onChange={(e) => setDensity(e.target.value as 'compact' | 'comfortable')}
-              >
-                <option value="compact">Compact (High density, smaller rows)</option>
-                <option value="comfortable">Comfortable (Standard padding)</option>
-              </select>
+            {/* =========================================================================
+                SECTION 2: TYPOGRAPHY & FONT MANAGEMENT (SEARCH, GOOGLE, UPLOAD, SIZES)
+               ========================================================================= */}
+            <div className="cb-settings-section">
+              <div className="cb-settings-section-title">
+                <span>🔤 Font Family & Typography Settings</span>
+              </div>
+
+              {/* Font Family Pickers with Autocomplete & Clear Button */}
+              <div className="cb-font-grid">
+                {/* UI Font Selector */}
+                <div className="cb-form-group" ref={uiDropdownRef}>
+                  <label className="cb-label">UI Font Family (Searchable Autocomplete)</label>
+                  <div className="cb-font-combobox">
+                    <div className="cb-search-input-wrap">
+                      <input
+                        ref={uiInputRef}
+                        className="cb-input"
+                        value={uiFontSearch}
+                        onChange={(e) => {
+                          setUiFontSearch(e.target.value);
+                          setUiFontDropdownOpen(true);
+                        }}
+                        onFocus={() => setUiFontDropdownOpen(true)}
+                        placeholder="Search UI font (e.g. Inter, Segoe UI, Roboto)"
+                      />
+                      {uiFontSearch.length > 0 && (
+                        <button
+                          type="button"
+                          className="cb-input-clear-btn"
+                          onClick={() => {
+                            setUiFontSearch('');
+                            setUiFontDropdownOpen(true);
+                            uiInputRef.current?.focus();
+                          }}
+                          title="Clear and show all fonts"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    {uiFontDropdownOpen && (
+                      <div className="cb-font-dropdown">
+                        {filteredUiFonts.slice(0, 40).map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            className={`cb-font-option ${typography.uiFont === f ? 'is-selected' : ''}`}
+                            style={{ fontFamily: f }}
+                            onClick={() => handleSelectUiFont(f)}
+                          >
+                            <span>{f}</span>
+                            <span className="text-xs text-muted" style={{ fontStyle: 'normal' }}>Sample</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Code / Mono Font Selector */}
+                <div className="cb-form-group" ref={monoDropdownRef}>
+                  <label className="cb-label">Code / Mono Font Family (Searchable Autocomplete)</label>
+                  <div className="cb-font-combobox">
+                    <div className="cb-search-input-wrap">
+                      <input
+                        ref={monoInputRef}
+                        className="cb-input"
+                        value={monoFontSearch}
+                        onChange={(e) => {
+                          setMonoFontSearch(e.target.value);
+                          setMonoFontDropdownOpen(true);
+                        }}
+                        onFocus={() => setMonoFontDropdownOpen(true)}
+                        placeholder="Search mono font (e.g. JetBrains Mono, Fira Code)"
+                      />
+                      {monoFontSearch.length > 0 && (
+                        <button
+                          type="button"
+                          className="cb-input-clear-btn"
+                          onClick={() => {
+                            setMonoFontSearch('');
+                            setMonoFontDropdownOpen(true);
+                            monoInputRef.current?.focus();
+                          }}
+                          title="Clear and show all fonts"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    {monoFontDropdownOpen && (
+                      <div className="cb-font-dropdown">
+                        {filteredMonoFonts.slice(0, 40).map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            className={`cb-font-option ${typography.monoFont === f ? 'is-selected' : ''}`}
+                            style={{ fontFamily: f }}
+                            onClick={() => handleSelectMonoFont(f)}
+                          >
+                            <span>{f}</span>
+                            <span className="text-xs text-muted" style={{ fontStyle: 'normal' }}>Mono</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Google Fonts & Local Font Upload Row */}
+              <div className="cb-form-row" style={{ gap: 12, alignItems: 'flex-start' }}>
+                {/* Google Fonts Importer */}
+                <div className="cb-form-group flex-1">
+                  <label className="cb-label">Import from Google Fonts / Web URL</label>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div className="cb-search-input-wrap">
+                      <input
+                        className="cb-input"
+                        value={googleFontInput}
+                        onChange={(e) => setGoogleFontInput(e.target.value)}
+                        placeholder="e.g. Fira Code, Poppins, or Google Fonts URL"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void handleImportGoogleFont();
+                        }}
+                      />
+                      {googleFontInput.length > 0 && (
+                        <button
+                          type="button"
+                          className="cb-input-clear-btn"
+                          onClick={() => setGoogleFontInput('')}
+                          title="Clear input"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="cb-button cb-button-primary"
+                      style={{ padding: '6px 14px', whiteSpace: 'nowrap', flexShrink: 0, height: 32, fontSize: 12.5 }}
+                      onClick={() => void handleImportGoogleFont()}
+                      disabled={!googleFontInput.trim()}
+                    >
+                      Fetch Font
+                    </button>
+                  </div>
+                </div>
+
+                {/* Local Font Uploader */}
+                <div className="cb-form-group" style={{ minWidth: 220 }}>
+                  <label className="cb-label">Upload Font from PC (.ttf, .otf, .woff)</label>
+                  <label
+                    className="cb-button cb-button-secondary"
+                    style={{
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: 32,
+                      fontSize: 12.5,
+                      gap: 6,
+                      width: '100%',
+                    }}
+                  >
+                    📁 Upload Local Font File
+                    <input
+                      type="file"
+                      accept=".ttf,.otf,.woff,.woff2,font/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => void handleUploadLocalFont(e.target.files?.[0])}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {fontStatus && (
+                <div className="cb-alert cb-alert-success" style={{ padding: '6px 12px', fontSize: 12 }}>
+                  {fontStatus}
+                </div>
+              )}
+
+              {/* Typography Size, Weight & Style Controls */}
+              <div className="cb-form-row" style={{ gap: 12 }}>
+                {/* UI Font Size with Steppers & Range Bar */}
+                <div className="cb-form-group flex-1">
+                  <label className="cb-label">UI Font Size</label>
+                  <div className="cb-slider-wrapper">
+                    <button
+                      type="button"
+                      className="cb-stepper-btn"
+                      disabled={typography.uiFontSize <= 11}
+                      onClick={() => handleTypographyChange({ uiFontSize: Math.max(11, typography.uiFontSize - 1) })}
+                      title="Decrease font size"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="range"
+                      min={11}
+                      max={18}
+                      step={1}
+                      className="cb-range-slider"
+                      value={typography.uiFontSize}
+                      onChange={(e) => handleTypographyChange({ uiFontSize: Number(e.target.value) })}
+                    />
+                    <button
+                      type="button"
+                      className="cb-stepper-btn"
+                      disabled={typography.uiFontSize >= 18}
+                      onClick={() => handleTypographyChange({ uiFontSize: Math.min(18, typography.uiFontSize + 1) })}
+                      title="Increase font size"
+                    >
+                      +
+                    </button>
+                    <span className="cb-slider-badge">{typography.uiFontSize}px</span>
+                  </div>
+                </div>
+
+                <div className="cb-form-group flex-1">
+                  <label className="cb-label">UI Font Weight</label>
+                  <select
+                    className="cb-select"
+                    value={typography.uiFontWeight}
+                    onChange={(e) => handleTypographyChange({ uiFontWeight: e.target.value })}
+                  >
+                    <option value="300">300 (Light)</option>
+                    <option value="400">400 (Regular)</option>
+                    <option value="500">500 (Medium)</option>
+                    <option value="600">600 (Semi-Bold)</option>
+                    <option value="700">700 (Bold)</option>
+                  </select>
+                </div>
+
+                {/* Code Font Size with Steppers & Range Bar */}
+                <div className="cb-form-group flex-1">
+                  <label className="cb-label">Code Font Size</label>
+                  <div className="cb-slider-wrapper">
+                    <button
+                      type="button"
+                      className="cb-stepper-btn"
+                      disabled={typography.monoFontSize <= 11}
+                      onClick={() => handleTypographyChange({ monoFontSize: Math.max(11, typography.monoFontSize - 1) })}
+                      title="Decrease code font size"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="range"
+                      min={11}
+                      max={22}
+                      step={1}
+                      className="cb-range-slider"
+                      value={typography.monoFontSize}
+                      onChange={(e) => handleTypographyChange({ monoFontSize: Number(e.target.value) })}
+                    />
+                    <button
+                      type="button"
+                      className="cb-stepper-btn"
+                      disabled={typography.monoFontSize >= 22}
+                      onClick={() => handleTypographyChange({ monoFontSize: Math.min(22, typography.monoFontSize + 1) })}
+                      title="Increase code font size"
+                    >
+                      +
+                    </button>
+                    <span className="cb-slider-badge">{typography.monoFontSize}px</span>
+                  </div>
+                </div>
+
+                <div className="cb-form-group flex-1">
+                  <label className="cb-label">Code Font Weight & Style</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select
+                      className="cb-select"
+                      value={typography.monoFontWeight}
+                      onChange={(e) => handleTypographyChange({ monoFontWeight: e.target.value })}
+                    >
+                      <option value="400">Regular</option>
+                      <option value="500">Medium</option>
+                      <option value="600">Semi-Bold</option>
+                      <option value="700">Bold</option>
+                    </select>
+                    <select
+                      className="cb-select"
+                      value={typography.monoFontStyle}
+                      onChange={(e) => handleTypographyChange({ monoFontStyle: e.target.value as 'normal' | 'italic' })}
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="italic">Italic</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="cb-form-row">
-              <div className="cb-form-group flex-1">
-                <label className="cb-label">UI Font</label>
-                <input
-                  className="cb-input"
-                  value={uiFont}
-                  onChange={(e) => setUiFont(e.target.value)}
-                />
+            {/* =========================================================================
+                SECTION 3: SQL QUERY SYNTAX HIGHLIGHT COLOR CUSTOMIZER (IDE FORMAT)
+               ========================================================================= */}
+            <div className="cb-settings-section">
+              <div className="cb-settings-section-title">
+                <span>🎨 SQL Query Syntax Highlight & Color Customizer</span>
               </div>
-              <div className="cb-form-group flex-1">
-                <label className="cb-label">Code / Mono Font</label>
-                <input
-                  className="cb-input"
-                  value={monoFont}
-                  onChange={(e) => setMonoFont(e.target.value)}
+
+              {/* SQL Theme Preset Dropdown */}
+              <div className="cb-form-group">
+                <label className="cb-label">SQL Theme Preset</label>
+                <select
+                  className="cb-select"
+                  value={sqlPresetId}
+                  onChange={(e) => handleSelectSqlPreset(e.target.value)}
+                >
+                  {SQL_THEME_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                  {sqlPresetId === 'custom' && <option value="custom">Custom (User Modified)</option>}
+                </select>
+              </div>
+
+              {/* SQL Syntax Color Swatches: Exactly 8 items in a balanced 4x2 grid */}
+              <div className="cb-sql-color-grid">
+                {/* Row 1: 4 items */}
+                <div className="cb-sql-color-item">
+                  <span>Keywords</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.keyword}
+                      onChange={(e) => handleSqlColorChange('keyword', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.keyword, fontWeight: 600 }}>
+                      SELECT
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cb-sql-color-item">
+                  <span>Functions</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.function}
+                      onChange={(e) => handleSqlColorChange('function', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.function }}>
+                      COUNT()
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cb-sql-color-item">
+                  <span>Strings</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.string}
+                      onChange={(e) => handleSqlColorChange('string', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.string }}>
+                      'active'
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cb-sql-color-item">
+                  <span>Numbers</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.number}
+                      onChange={(e) => handleSqlColorChange('number', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.number }}>
+                      100
+                    </span>
+                  </div>
+                </div>
+
+                {/* Row 2: 4 items */}
+                <div className="cb-sql-color-item">
+                  <span>Comments</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.comment}
+                      onChange={(e) => handleSqlColorChange('comment', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.comment, fontStyle: 'italic' }}>
+                      -- note
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cb-sql-color-item">
+                  <span>Operators</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.operator}
+                      onChange={(e) => handleSqlColorChange('operator', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.operator }}>
+                      &gt;=
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cb-sql-color-item">
+                  <span>Identifiers</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={sqlColors.identifier}
+                      onChange={(e) => handleSqlColorChange('identifier', e.target.value)}
+                    />
+                    <span className="text-xs" style={{ color: sqlColors.identifier }}>
+                      users
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cb-sql-color-item">
+                  <span>Selection</span>
+                  <div className="cb-color-input-wrap">
+                    <input
+                      type="color"
+                      value={getSelectionHex(sqlColors.selection)}
+                      onChange={(e) => handleSqlColorChange('selection', `${e.target.value}55`)}
+                    />
+                    <span className="text-xs" style={{ color: getSelectionHex(sqlColors.selection), fontWeight: 600 }}>
+                      Highlight
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Interactive SQL Preview */}
+              <div className="cb-form-group">
+                <label className="cb-label">Live SQL Syntax Preview</label>
+                <div
+                  className="cb-sql-preview-box"
+                  dangerouslySetInnerHTML={{ __html: sampleHighlighted }}
                 />
               </div>
             </div>
 
             {/* Theme Profile JSON (PRD-NFR-01) */}
             <div className="cb-form-group">
-              <label className="cb-label">Theme Profile (JSON Save / Load)</label>
+              <label className="cb-label">Theme & Typography Profile (JSON Save / Load)</label>
               <div className="cb-accent-picker-row">
                 <button
                   type="button"
                   className="cb-button"
                   onClick={handleThemeExport}
-                  title="Download current theme as JSON"
+                  title="Download complete theme & font profile as JSON"
                 >
-                  ⬇️ Export Theme
+                  ⬇️ Export Full Theme Profile
                 </button>
                 <label className="cb-button cb-button-secondary" style={{ cursor: 'pointer' }}>
-                  ⬆️ Import Theme
+                  ⬆️ Import Theme Profile
                   <input
                     type="file"
                     accept="application/json,.json"
@@ -614,4 +1173,3 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
     </div>
   );
 }
-
