@@ -165,6 +165,80 @@ async function bootstrap(): Promise<void> {
   ipcMain.on(IPC_CHANNELS.windowSetOpacity, (_event, opacity: number) => {
     applyOpacity(opacity);
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.windowOpenPopout,
+    (
+      _event,
+      input: {
+        type: 'query' | 'table';
+        title: string;
+        connectionId?: string;
+        tabId?: string;
+        sql?: string;
+        table?: string;
+      },
+    ) => {
+      const isWindows = process.platform === 'win32';
+      const isMac = process.platform === 'darwin';
+
+      const popoutWin = new BrowserWindow({
+        width: 1160,
+        height: 760,
+        minWidth: 800,
+        minHeight: 500,
+        title: `CanvaBase — ${input.title || 'Workspace'}`,
+        show: false,
+        autoHideMenuBar: true,
+        backgroundColor: '#0f1222',
+        titleBarStyle: isWindows || isMac ? 'hidden' : 'default',
+        ...(isWindows
+          ? {
+              titleBarOverlay: {
+                color: '#0f1222',
+                symbolColor: '#e6e8f2',
+                height: 48,
+              },
+            }
+          : {}),
+        webPreferences: {
+          preload: join(__dirname, '../preload/index.cjs'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          webSecurity: true,
+        },
+      });
+
+      const showWindow = () => {
+        if (!popoutWin.isDestroyed() && !popoutWin.isVisible()) {
+          popoutWin.show();
+          popoutWin.focus();
+        }
+      };
+
+      popoutWin.once('ready-to-show', showWindow);
+      popoutWin.webContents.on('did-finish-load', showWindow);
+
+      const params = new URLSearchParams();
+      params.set('type', input.type || 'query');
+      if (input.title) params.set('title', input.title);
+      if (input.connectionId) params.set('connectionId', input.connectionId);
+      if (input.tabId) params.set('tabId', input.tabId);
+      if (input.sql) params.set('sql', input.sql);
+      if (input.table) params.set('table', input.table);
+
+      const hash = `#/popout?${params.toString()}`;
+
+      if (process.env['ELECTRON_RENDERER_URL']) {
+        void popoutWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}${hash}`);
+      } else {
+        void popoutWin.loadFile(join(__dirname, '../renderer/index.html'), { hash });
+      }
+
+      return { ok: true, data: { opened: true } };
+    },
+  );
 }
 
 app
