@@ -4,6 +4,7 @@ import type { AppStore } from '../store';
 import { highlightSql } from '../lib/sqlHighlighter';
 import { validateSql, type SqlDialect, type SqlDiagnostic } from '../lib/sqlValidator';
 import { FloatingWindow } from './FloatingWindow';
+import { ResultGrid } from './ResultGrid';
 
 const SUGGEST_DEBOUNCE_MS = 120;
 
@@ -65,6 +66,32 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
   // Fullscreen / Detached Floating Window State (Requirement 3.1)
   const [isDetached, setIsDetached] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showResultsInDetached, setShowResultsInDetached] = useState(true);
+  const [detachedSplitRatio, setDetachedSplitRatio] = useState(48);
+  const isResizingDetachedRef = useRef(false);
+
+  const handleSplitMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    isResizingDetachedRef.current = true;
+
+    const handleMouseMove = (ev: globalThis.MouseEvent) => {
+      if (!isResizingDetachedRef.current) return;
+      const container = document.querySelector('.cb-detached-workspace');
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const ratio = Math.max(20, Math.min(80, ((ev.clientY - rect.top) / rect.height) * 100));
+      setDetachedSplitRatio(ratio);
+    };
+
+    const handleMouseUp = () => {
+      isResizingDetachedRef.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Active Connection Dialect
   const activeConn = connections.find((c) => c.id === activeConnectionId);
@@ -280,8 +307,18 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
           +
         </button>
 
-        {/* Fullscreen / Detach Button in Tab Bar */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', paddingRight: 8 }}>
+        {/* Fullscreen / Detach / Results Toggle Buttons in Tab Bar */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 8 }}>
+          {isDetached && (
+            <button
+              className={`cb-action-btn ${showResultsInDetached ? 'active' : ''}`}
+              style={{ padding: '3px 8px', fontSize: 11 }}
+              onClick={() => setShowResultsInDetached((v) => !v)}
+              title={showResultsInDetached ? 'Hide Result Grid (Full Height Editor)' : 'Show Live Query Results Grid'}
+            >
+              {showResultsInDetached ? '🗖 Hide Results' : '📊 Show Results'}
+            </button>
+          )}
           <button
             className="cb-action-btn"
             style={{ padding: '3px 8px', fontSize: 11 }}
@@ -289,7 +326,7 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
               setIsDetached((v) => !v);
               setIsFullscreen(true);
             }}
-            title={isDetached ? 'Dock back to main view' : 'Fullscreen / Popout Editor Window'}
+            title={isDetached ? 'Dock back to main GUI layout' : 'Fullscreen / Popout Workspace'}
           >
             {isDetached ? '🗗 Dock' : '⛶ Fullscreen'}
           </button>
@@ -297,12 +334,26 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
       </div>
 
       {/* Code Textarea & Autocomplete */}
-      <div className="sql-editor-wrap" style={isDetached ? { flex: 1, minHeight: 280, maxHeight: 'none' } : undefined}>
+      <div
+        className="sql-editor-wrap"
+        style={
+          isDetached
+            ? {
+                flex: 1,
+                minHeight: 140,
+                height: '100%',
+                maxHeight: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+              }
+            : undefined
+        }
+      >
         <pre className="sql-highlight" aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlighted }} />
         <textarea
           ref={textareaRef}
           className="sql-input"
-          style={isDetached ? { height: '100%', maxHeight: 'none', resize: 'none' } : undefined}
+          style={isDetached ? { flex: 1, height: '100%', maxHeight: 'none', resize: 'none' } : undefined}
           value={tab.sql}
           placeholder="-- Type your SQL query here (e.g. SELECT * FROM users LIMIT 100;)"
           spellCheck={false}
@@ -312,7 +363,10 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
           onScroll={() => {
             const el = textareaRef.current;
             const pre = el?.parentElement?.querySelector('.sql-highlight');
-            if (el && pre) pre.scrollTop = el.scrollTop;
+            if (el && pre) {
+              pre.scrollTop = el.scrollTop;
+              pre.scrollLeft = el.scrollLeft;
+            }
           }}
         />
         {suggest && suggest.items.length > 0 && (
@@ -509,7 +563,7 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
   if (isDetached) {
     return (
       <FloatingWindow
-        title={`SQL Query Editor — ${tab.title}`}
+        title={`SQL Query Workspace — ${tab.title}`}
         icon="📝"
         isFullscreen={isFullscreen}
         onToggleFullscreen={() => setIsFullscreen((v) => !v)}
@@ -517,10 +571,35 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
           setIsDetached(false);
           setIsFullscreen(false);
         }}
-        initialWidth={960}
-        initialHeight={620}
+        initialWidth={1080}
+        initialHeight={720}
       >
-        {renderEditorBody()}
+        <div className="cb-detached-workspace">
+          <div
+            style={{
+              flex: showResultsInDetached ? `0 0 ${detachedSplitRatio}%` : '1 1 100%',
+              minHeight: 140,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {renderEditorBody()}
+          </div>
+
+          {showResultsInDetached && (
+            <>
+              <div
+                className="cb-detached-split-handle"
+                onMouseDown={handleSplitMouseDown}
+                title="Drag vertically to resize Editor / Results split"
+              />
+              <div className="cb-detached-result-wrap">
+                <ResultGrid store={store} />
+              </div>
+            </>
+          )}
+        </div>
       </FloatingWindow>
     );
   }
