@@ -39,6 +39,7 @@ export const IPC_CHANNELS = {
   health: 'canvabase:health:health',
   themeSet: 'canvabase:theme:set',
   windowSetOpacity: 'canvabase:window:setOpacity',
+  windowOpenPopout: 'canvabase:window:openPopout',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
