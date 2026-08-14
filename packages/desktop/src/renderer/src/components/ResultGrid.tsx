@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ExportFormat } from '@canvabase/contracts';
 import { filterRows, sortRows, stringifyCell } from '../lib/gridOps';
 import type { AppStore } from '../store';
+import { FloatingWindow } from './FloatingWindow';
 
 const ROW_HEIGHT = 28;
 const OVERSCAN = 10;
@@ -40,6 +41,10 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
   const [importReplace, setImportReplace] = useState(false);
   const gridDisplayMode = store((s) => s.gridDisplayMode);
   const [formRowIdx, setFormRowIdx] = useState(0);
+
+  // Fullscreen / Floating Detached Window State (Requirement 4.1)
+  const [isDetached, setIsDetached] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const tab = (tabs.find((t) => t.id === activeTabId) ?? tabs[0])!;
   const { columns, rows, hasMore, running, error, table, schema, sort, filters } = tab;
@@ -234,8 +239,8 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
 
   const virtualItems = rowVirtualizer.getVirtualItems();
 
-  return (
-    <div className="result-grid" onClick={() => setContextMenu(null)}>
+  const renderGridContent = () => (
+    <div className={`result-grid ${isDetached ? 'is-detached' : ''}`} onClick={() => setContextMenu(null)}>
       {gridDisplayMode === 'form' ? (
         <div className="cb-form-view-container">
           <div className="cb-form-view-header">
@@ -277,6 +282,18 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
               </button>
             </div>
             {table && <span className="active-badge font-bold">Table: {table}</span>}
+            <div style={{ marginLeft: 'auto' }}>
+              <button
+                className="cb-button cb-btn-sm"
+                onClick={() => {
+                  setIsDetached((v) => !v);
+                  setIsFullscreen(true);
+                }}
+                title={isDetached ? 'Dock table back' : 'Fullscreen / Popout Table Window'}
+              >
+                {isDetached ? '🗗 Dock' : '⛶ Fullscreen'}
+              </button>
+            </div>
           </div>
 
           {visibleRows.length === 0 ? (
@@ -375,6 +392,19 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
           </span>
         )}
         {transfer.error && <span className="transfer-status transfer-error">{transfer.error}</span>}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          <button
+            className="cb-button"
+            style={{ padding: '3px 9px', fontSize: 11.5 }}
+            onClick={() => {
+              setIsDetached((v) => !v);
+              setIsFullscreen(true);
+            }}
+            title={isDetached ? 'Dock table back to GUI' : 'Fullscreen / Popout Table Window'}
+          >
+            {isDetached ? '🗗 Dock' : '⛶ Fullscreen'}
+          </button>
+        </div>
       </div>
       <div className="grid-scroller" ref={parentRef}>
         <div
@@ -640,4 +670,25 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
       )}
     </div>
   );
+
+  if (isDetached) {
+    return (
+      <FloatingWindow
+        title={`Data Table — ${table || tab.title || 'Result Grid'}`}
+        icon="📊"
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={() => setIsFullscreen((v) => !v)}
+        onDock={() => {
+          setIsDetached(false);
+          setIsFullscreen(false);
+        }}
+        initialWidth={1040}
+        initialHeight={680}
+      >
+        {renderGridContent()}
+      </FloatingWindow>
+    );
+  }
+
+  return renderGridContent();
 }
