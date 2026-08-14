@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent, type MouseEvent } from 'react';
 import type { Suggestion } from '@canvabase/contracts';
 import type { AppStore } from '../store';
 import { highlightSql } from '../lib/sqlHighlighter';
+import { validateSql, type SqlDialect, type SqlDiagnostic } from '../lib/sqlValidator';
+import { FloatingWindow } from './FloatingWindow';
 
 const SUGGEST_DEBOUNCE_MS = 120;
 
@@ -29,6 +31,7 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
   const tabs = store((s) => s.tabs);
   const activeTabId = store((s) => s.activeTabId);
   const activeConnectionId = store((s) => s.activeConnectionId);
+  const connections = store((s) => s.connections);
   const client = store((s) => s.client);
   const runQuery = store((s) => s.runQuery);
   const cancelQuery = store((s) => s.cancelQuery);
@@ -58,6 +61,22 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
   const [editTitle, setEditTitle] = useState('');
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const debounceRef = useRef<number | null>(null);
+
+  // Fullscreen / Detached Floating Window State (Requirement 3.1)
+  const [isDetached, setIsDetached] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Active Connection Dialect
+  const activeConn = connections.find((c) => c.id === activeConnectionId);
+  const dialect: SqlDialect = (activeConn?.engine as SqlDialect) || 'mysql';
+
+  // Dialect-aware SQL Syntax Validation (Requirement 3.2)
+  const diagnostics: SqlDiagnostic[] = useMemo(() => {
+    return validateSql(tab.sql, dialect);
+  }, [tab.sql, dialect]);
+
+  const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+  const warningCount = diagnostics.filter((d) => d.severity === 'warning').length;
 
   useEffect(() => {
     void loadSavedQueries();
@@ -201,8 +220,8 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
   const coords = positionToCoords();
   const highlighted = highlightSql(tab.sql);
 
-  return (
-    <div className="query-editor" onClick={() => setTabContextMenu(null)}>
+  const renderEditorBody = () => (
+    <div className={`query-editor ${isDetached ? 'is-detached' : ''}`} onClick={() => setTabContextMenu(null)}>
       {/* Tab Navigation */}
       <div className="query-tabs">
         {tabs.map((t) => (
@@ -260,14 +279,30 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
         <button className="query-tab-new" onClick={newTab} title="Create New Query Tab">
           +
         </button>
+
+        {/* Fullscreen / Detach Button in Tab Bar */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', paddingRight: 8 }}>
+          <button
+            className="cb-action-btn"
+            style={{ padding: '3px 8px', fontSize: 11 }}
+            onClick={() => {
+              setIsDetached((v) => !v);
+              setIsFullscreen(true);
+            }}
+            title={isDetached ? 'Dock back to main view' : 'Fullscreen / Popout Editor Window'}
+          >
+            {isDetached ? '🗗 Dock' : '⛶ Fullscreen'}
+          </button>
+        </div>
       </div>
 
       {/* Code Textarea & Autocomplete */}
-      <div className="sql-editor-wrap">
+      <div className="sql-editor-wrap" style={isDetached ? { flex: 1, minHeight: 280, maxHeight: 'none' } : undefined}>
         <pre className="sql-highlight" aria-hidden="true" dangerouslySetInnerHTML={{ __html: highlighted }} />
         <textarea
           ref={textareaRef}
           className="sql-input"
+          style={isDetached ? { height: '100%', maxHeight: 'none', resize: 'none' } : undefined}
           value={tab.sql}
           placeholder="-- Type your SQL query here (e.g. SELECT * FROM users LIMIT 100;)"
           spellCheck={false}
@@ -298,6 +333,36 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Real-Time SQL Dialect Syntax Diagnostics Bar (Requirement 3.2) */}
+      <div className="sql-diagnostics-bar">
+        <div className="sql-diag-summary">
+          <span className="sql-dialect-tag" title="Target Database Dialect">
+            {dialect}
+          </span>
+          {errorCount > 0 ? (
+            <span className="sql-diag-badge is-error">
+              ❌ {errorCount} Error{errorCount > 1 ? 's' : ''}
+            </span>
+          ) : warningCount > 0 ? (
+            <span className="sql-diag-badge is-warning">
+              ⚠️ {warningCount} Warning{warningCount > 1 ? 's' : ''}
+            </span>
+          ) : (
+            <span className="sql-diag-badge is-ok">
+              ✓ Syntax Valid
+            </span>
+          )}
+          {diagnostics.length > 0 && (
+            <span className="sql-diag-msg-preview" title={diagnostics[0]?.message}>
+              Ln {diagnostics[0]?.line}, Col {diagnostics[0]?.column}: {diagnostics[0]?.message}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted">
+          {tab.sql.length} chars | {tab.sql.split('\n').length} lines
+        </span>
       </div>
 
       {runError && <div className="cb-alert cb-alert-warn">{runError}</div>}
@@ -440,4 +505,25 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
       )}
     </div>
   );
+
+  if (isDetached) {
+    return (
+      <FloatingWindow
+        title={`SQL Query Editor — ${tab.title}`}
+        icon="📝"
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={() => setIsFullscreen((v) => !v)}
+        onDock={() => {
+          setIsDetached(false);
+          setIsFullscreen(false);
+        }}
+        initialWidth={960}
+        initialHeight={620}
+      >
+        {renderEditorBody()}
+      </FloatingWindow>
+    );
+  }
+
+  return renderEditorBody();
 }
