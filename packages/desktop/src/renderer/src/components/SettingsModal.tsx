@@ -640,22 +640,41 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
             </div>
 
             {/* Opacity & Density */}
-            <div className="cb-form-row">
-              <div className="cb-form-group flex-1">
-                <label className="cb-label">
-                  Layout Opacity: <strong className="highlight-text">{appOpacity}%</strong>
-                </label>
-                <input
-                  type="range"
-                  min={40}
-                  max={100}
-                  step={5}
-                  className="cb-range-slider"
-                  value={appOpacity}
-                  onChange={(e) => handleOpacityChange(Number(e.target.value))}
-                />
+            <div className="cb-font-grid">
+              <div className="cb-form-group">
+                <label className="cb-label">Layout Opacity</label>
+                <div className="cb-slider-wrapper">
+                  <button
+                    type="button"
+                    className="cb-stepper-btn"
+                    disabled={appOpacity <= 40}
+                    onClick={() => handleOpacityChange(Math.max(40, appOpacity - 5))}
+                    title="Decrease opacity"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="range"
+                    min={40}
+                    max={100}
+                    step={5}
+                    className="cb-range-slider"
+                    value={appOpacity}
+                    onChange={(e) => handleOpacityChange(Number(e.target.value))}
+                  />
+                  <button
+                    type="button"
+                    className="cb-stepper-btn"
+                    disabled={appOpacity >= 100}
+                    onClick={() => handleOpacityChange(Math.min(100, appOpacity + 5))}
+                    title="Increase opacity"
+                  >
+                    +
+                  </button>
+                  <span className="cb-slider-badge">{appOpacity}%</span>
+                </div>
               </div>
-              <div className="cb-form-group flex-1">
+              <div className="cb-form-group">
                 <label className="cb-label">Grid Density</label>
                 <select
                   className="cb-select"
@@ -864,10 +883,10 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
                 </div>
               )}
 
-              {/* Typography Size, Weight & Style Controls */}
-              <div className="cb-form-row" style={{ gap: 12 }}>
+              {/* Typography Row 1: UI Font Size & Weight */}
+              <div className="cb-font-grid">
                 {/* UI Font Size with Steppers & Range Bar */}
-                <div className="cb-form-group flex-1">
+                <div className="cb-form-group">
                   <label className="cb-label">UI Font Size</label>
                   <div className="cb-slider-wrapper">
                     <button
@@ -901,7 +920,7 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
                   </div>
                 </div>
 
-                <div className="cb-form-group flex-1">
+                <div className="cb-form-group">
                   <label className="cb-label">UI Font Weight</label>
                   <select
                     className="cb-select"
@@ -915,9 +934,12 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
                     <option value="700">700 (Bold)</option>
                   </select>
                 </div>
+              </div>
 
+              {/* Typography Row 2: Code / Mono Font Size, Weight & Style */}
+              <div className="cb-font-grid">
                 {/* Code Font Size with Steppers & Range Bar */}
-                <div className="cb-form-group flex-1">
+                <div className="cb-form-group">
                   <label className="cb-label">Code Font Size</label>
                   <div className="cb-slider-wrapper">
                     <button
@@ -951,26 +973,28 @@ export function SettingsModal({ store, isOpen, onClose }: SettingsModalProps): J
                   </div>
                 </div>
 
-                <div className="cb-form-group flex-1">
+                <div className="cb-form-group">
                   <label className="cb-label">Code Font Weight & Style</label>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
                     <select
                       className="cb-select"
+                      style={{ flex: 1 }}
                       value={typography.monoFontWeight}
                       onChange={(e) => handleTypographyChange({ monoFontWeight: e.target.value })}
                     >
-                      <option value="400">Regular</option>
-                      <option value="500">Medium</option>
-                      <option value="600">Semi-Bold</option>
-                      <option value="700">Bold</option>
+                      <option value="400">400 (Regular)</option>
+                      <option value="500">500 (Medium)</option>
+                      <option value="600">600 (Semi-Bold)</option>
+                      <option value="700">700 (Bold)</option>
                     </select>
                     <select
                       className="cb-select"
+                      style={{ flex: 1 }}
                       value={typography.monoFontStyle}
                       onChange={(e) => handleTypographyChange({ monoFontStyle: e.target.value as 'normal' | 'italic' })}
                     >
-                      <option value="normal">Normal</option>
-                      <option value="italic">Italic</option>
+                      <option value="normal">Normal Style</option>
+                      <option value="italic">Italic Style</option>
                     </select>
                   </div>
                 </div>
