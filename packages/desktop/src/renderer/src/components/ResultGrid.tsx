@@ -392,7 +392,22 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
           </span>
         )}
         {transfer.error && <span className="transfer-status transfer-error">{transfer.error}</span>}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            className="cb-button"
+            style={{ padding: '3px 9px', fontSize: 11.5 }}
+            onClick={() => {
+              void store.getState().client.window?.openPopout({
+                type: 'table',
+                title: table || 'Data Table',
+                connectionId: store.getState().activeConnectionId || '',
+                table: table || '',
+              });
+            }}
+            title="Open Table in a Separate Real Native OS Window (Taskbar Separated / Monitor 2)"
+          >
+            🗗 New Window
+          </button>
           <button
             className="cb-button"
             style={{ padding: '3px 9px', fontSize: 11.5 }}
@@ -400,7 +415,7 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
               setIsDetached((v) => !v);
               setIsFullscreen(true);
             }}
-            title={isDetached ? 'Dock table back to GUI' : 'Fullscreen / Popout Table Window'}
+            title={isDetached ? 'Dock table back to GUI' : 'Maximize / Fullscreen In-App'}
           >
             {isDetached ? '🗗 Dock' : '⛶ Fullscreen'}
           </button>
