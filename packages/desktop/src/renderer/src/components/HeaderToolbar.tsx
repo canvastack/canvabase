@@ -154,6 +154,39 @@ export function HeaderToolbar({
               )}
               {showText && <span>ERD Canvas</span>}
             </button>
+
+            <button
+              className={`cb-view-tab ${activeView === 'role' ? 'active' : ''}`}
+              onClick={() => setActiveView('role')}
+              title="PostgreSQL Role & Privilege Manager"
+            >
+              {showIcon && (
+                <svg className="cb-icon-svg text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+              )}
+              {showText && <span>Role Manager</span>}
+            </button>
+
+            <button
+              className={`cb-view-tab ${activeView === 'history_log' ? 'active' : ''}`}
+              onClick={() => setActiveView('history_log')}
+              title="Query Execution History Log (Ctrl+L)"
+            >
+              {showIcon && (
+                <svg className="cb-icon-svg text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              )}
+              {showText && <span>History Log</span>}
+            </button>
+
+            <button
+              className={`cb-view-tab ${activeView === 'server_monitor' ? 'active' : ''}`}
+              onClick={() => setActiveView('server_monitor')}
+              title="Database Server Process & Lock Monitor"
+            >
+              {showIcon && (
+                <svg className="cb-icon-svg text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+              )}
+              {showText && <span>Server Monitor</span>}
+            </button>
           </div>
 
           <div className="cb-divider" />
