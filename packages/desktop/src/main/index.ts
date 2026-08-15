@@ -9,6 +9,7 @@ import { DataService } from './services/DataService.js';
 import { TableDesignerService } from './services/TableDesignerService.js';
 import { ErdService } from './services/ErdService.js';
 import { TransferService } from './services/TransferService.js';
+import { AuditLogger } from './services/AuditLogger.js';
 import { registerIpcHandlers } from './ipc/handlers.js';
 import { IPC_CHANNELS } from '../ipc/channels.js';
 import { APP_NAME } from '../constants.js';
@@ -34,6 +35,23 @@ function hardenSession(): void {
       },
     });
   });
+
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
+    callback(false);
+  });
+  session.defaultSession.setPermissionCheckHandler(() => false);
+}
+
+/** Hanya izinkan membuka link http/https eksternal (block protocol berbahaya). */
+function openExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    void shell.openExternal(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createWindow(): void {
@@ -90,7 +108,7 @@ function createWindow(): void {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openExternalUrl(url);
     return { action: 'deny' };
   });
 
@@ -107,18 +125,19 @@ function createWindow(): void {
 
 async function bootstrap(): Promise<void> {
   const registry = createBuiltinRegistry();
+  const audit = new AuditLogger(app.getPath('userData'));
   const connections = new ConnectionManager(registry, app.getPath('userData'));
   await connections.init();
   const query = new QueryEngine(connections, app.getPath('userData'));
   const browser = new ObjectBrowserService(connections);
   const data = new DataService(connections, query);
-  const designer = new TableDesignerService(connections, app.getPath('userData'));
+  const designer = new TableDesignerService(connections, audit);
   const erd = new ErdService(connections);
   const transfer = new TransferService(connections, (progress: TransferProgress) => {
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(IPC_CHANNELS.transferProgress, progress);
     }
-  });
+  }, audit);
   registerIpcHandlers({ connections, query, browser, data, designer, erd, transfer });
 
   const applyTheme = (theme: 'dark' | 'light') => {
@@ -219,6 +238,15 @@ async function bootstrap(): Promise<void> {
 
       popoutWin.once('ready-to-show', showWindow);
       popoutWin.webContents.on('did-finish-load', showWindow);
+
+      popoutWin.webContents.setWindowOpenHandler(({ url }) => {
+        openExternalUrl(url);
+        return { action: 'deny' };
+      });
+
+      popoutWin.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith('file:')) event.preventDefault();
+      });
 
       const params = new URLSearchParams();
       params.set('type', input.type || 'query');
