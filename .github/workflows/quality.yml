@@ -23,14 +23,14 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Build shared packages
+        run: npm run build:packages
+
       - name: Lint
         run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
-
-      - name: Build shared packages
-        run: npm run build:packages
 
       - name: Test
         run: npm run test

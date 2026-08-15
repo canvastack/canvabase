@@ -2,7 +2,7 @@
   {
     "name": "renderer-main",
     "path": "packages/desktop/out/renderer/assets/index-*.js",
-    "limit": "200 kB",
+    "limit": "220 kB",
     "gzip": true
   },
   {

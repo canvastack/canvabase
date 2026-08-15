@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install AgentShield
-        run: npm install -g agentshield
+        run: npm install -g ecc-agentshield
 
       - name: Scan agent configs for injection/policy issues
         run: agentshield scan --format markdown
