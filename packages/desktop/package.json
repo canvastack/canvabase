@@ -13,7 +13,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc -b tsconfig.json",
     "prepackage": "node -e \"if (process.platform === 'win32') try { require('child_process').execSync('taskkill /F /IM CanvaBase.exe', {stdio:'ignore'}); } catch {}\"",
-    "package": "npm run prepackage && npm run build && npx electron-builder --dir -c.forceCodeSigning=false"
+    "package": "npm run prepackage && npm run build && npx electron-builder --dir -c.forceCodeSigning=false",
+    "package:installer": "npm run prepackage && npm run build && npx electron-builder --win -c.forceCodeSigning=false"
   },
   "dependencies": {
     "@canvabase/contracts": "*",
@@ -30,7 +31,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "33.2.1",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "vite": "^7.3.6"
   },
@@ -47,9 +48,28 @@
     ],
     "afterPack": "./scripts/afterPack.cjs",
     "win": {
-      "target": "dir",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "src/renderer/src/assets/logo.png"
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CanvaBase"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "canvastack",
+        "repo": "canvabase"
+      }
+    ],
     "mac": {
       "target": "dmg"
     },
