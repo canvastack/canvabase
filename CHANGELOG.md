@@ -6,7 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2026-08-15
+
+### Gate G4 — QA, Security Audit & Deployment
+
+#### Added
+- **Packaging & CI Gates (G4-5)**:
+  - **NSIS Windows installer** (`CanvaBase-0.1.0-Setup-x64.exe` → `CanvaBase-1.0.0-Setup-x64.exe`): one-click vs custom dir, desktop + start menu shortcuts, `artifactName` eksplisit untuk auto-update konsisten (fix UAT-FIND-001).
+  - Auto-publish konfigurasi GitHub Releases (`canvastack/canvabase`) via electron-builder `publish` provider.
+  - **CI quality workflow** (`.github/workflows/quality.yml`): lint, typecheck, test, build, dan repo scan gate — menutup gap CI lint/typecheck/package.
+  - **Security CI** (`.github/workflows/security.yml`): gitleaks secret scanning + AgentShield + `npm audit` pada PR/push main + cron mingguan.
+- **UAT v1.0.0**: baseline 12 test case dieksekusi — **12/12 PASS**, 0 blocker, sign-off stakeholder 2026-08-15.
+
+#### Changed
+- **electron-builder** `25.1.8 → 26.15.3`: npm audit 27 → 15 dev-vulns (critical 3 → 0); runtime deps tetap 0 vuln. Sisa 15 build-chain vulns didefer (electron major 33→43, extract-zip, nanoid — roadmap v1.x).
+- **Versioning Git (Laravel-style)**: tag = rilis immutable, branch `N.x` = maintenance line, `master` = development. Tag `v1.0.0` + branch `1.x` dibuat saat rilis ini.
+- **CI trigger fix**: workflow triggers `main` → `master` (sebelumnya CI tidak pernah jalan di push main).
 
 ### Post-G3 UI Polish (2026-08-14)
 > Backfilled dari `docs/audit/walkthrough7*.md` — menyelesaikan siklus G3 Development.
