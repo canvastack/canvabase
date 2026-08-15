@@ -34,6 +34,14 @@ Thumbs.db
 # Environment & secrets
 .env
 .env.local
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+agentshield/
 
 # Historical audit docs (archived via waypoint WOs)
 docs/audit
