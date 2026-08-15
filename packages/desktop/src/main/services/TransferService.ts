@@ -29,7 +29,8 @@ import {
 import type { DialectPort } from '@canvabase/dialects';
 import { toClientError } from '../errors.js';
 import type { ConnectionManager } from './ConnectionManager.js';
-import { csvEncodeRow, createCsvParserState, csvParse } from './transfer/csvCodec.js';
+import type { AuditLogger } from './AuditLogger.js';
+import { csvEncodeRowSafe, createCsvParserState, csvParse } from './transfer/csvCodec.js';
 import {
   buildCreateTable,
   isDangerousStatement,
@@ -51,6 +52,7 @@ export class TransferService implements TransferApi {
   constructor(
     private readonly connections: ConnectionManager,
     private readonly onProgress?: (progress: TransferProgress) => void,
+    private readonly audit?: AuditLogger,
   ) {}
 
   private session(connectionId: string): Result<DialectPort> {
@@ -96,6 +98,12 @@ export class TransferService implements TransferApi {
       }
 
       this.emit({ phase: 'done', format, direction: 'export', processed: rows, total: null, path: filePath });
+      await this.audit?.append({
+        action: 'transfer.export',
+        connectionId: parsed.data.connectionId,
+        target: table,
+        detail: { format, rows, path: filePath },
+      });
       return ok({ path: filePath, rows });
     } catch (err) {
       this.emitError('export', parsed.data.format, this.errorText(toClientError(err)));
@@ -126,6 +134,12 @@ export class TransferService implements TransferApi {
         ? await this.importSql(session.data, filePath)
         : await this.importRows(session.data, filePath, parsed.data);
       this.emit({ phase: 'done', format, direction: 'import', processed: rows, total: null, path: filePath });
+      await this.audit?.append({
+        action: 'transfer.import',
+        connectionId: parsed.data.connectionId,
+        target: parsed.data.table ?? 'database',
+        detail: { format, rows, path: filePath },
+      });
       return ok({ rows });
     } catch (err) {
       this.emitError('import', format, this.errorText(toClientError(err)));
@@ -170,6 +184,12 @@ export class TransferService implements TransferApi {
         }
 
         this.emit({ phase: 'done', format, direction: 'export', processed: totalRows, total: null, path: filePath });
+        await this.audit?.append({
+          action: 'transfer.backup',
+          connectionId,
+          target: databaseName,
+          detail: { format: 'sql', rows: totalRows, path: filePath },
+        });
         return ok({ path: filePath, rows: totalRows });
       } else {
         const { canceled, filePaths } = await dialog.showOpenDialog({
@@ -198,6 +218,12 @@ export class TransferService implements TransferApi {
         }
 
         this.emit({ phase: 'done', format, direction: 'export', processed: totalRows, total: null, path: dirPath });
+        await this.audit?.append({
+          action: 'transfer.backup',
+          connectionId,
+          target: databaseName,
+          detail: { format, rows: totalRows, path: dirPath },
+        });
         return ok({ path: dirPath, rows: totalRows });
       }
     } catch (err) {
@@ -251,6 +277,12 @@ export class TransferService implements TransferApi {
       }
 
       this.emit({ phase: 'done', format, direction: 'import', processed: rows, total: null, path: filePath });
+      await this.audit?.append({
+        action: 'transfer.restore',
+        connectionId: parsed.data.connectionId,
+        target: table ?? 'database',
+        detail: { format, rows, path: filePath },
+      });
       return ok({ rows });
     } catch (err) {
       this.emitError('import', format, this.errorText(toClientError(err)));
@@ -300,7 +332,7 @@ export class TransferService implements TransferApi {
       stream.write(columns.map((c) => c.name).join(opts.separator) + '\n');
     }
     for await (const row of this.iterateRows(dialect, table, columns, rowLimit)) {
-      stream.write(csvEncodeRow(columns.map((c) => row[c.name]), opts) + '\n');
+      stream.write(csvEncodeRowSafe(columns.map((c) => row[c.name]), opts) + '\n');
       processed++;
       if (processed % 1000 === 0) this.emitProgress('export', 'csv', processed, null);
     }
@@ -400,10 +432,15 @@ export class TransferService implements TransferApi {
     let inserted = 0;
     const flush = async (): Promise<void> => {
       if (batch.length === 0 || columns.length === 0) return;
-      const rowSql = `(${columns.map(() => dialect.parameterPlaceholder(1)).join(', ')})`;
+      const paramCount = columns.length;
       const params = batch.flat();
       await dialect.execute(
-        `INSERT INTO ${dialect.quoteIdentifier(table)} (${columns.map((c) => dialect.quoteIdentifier(c)).join(', ')}) VALUES ${batch.map(() => rowSql).join(', ')}`,
+        `INSERT INTO ${dialect.quoteIdentifier(table)} (${columns.map((c) => dialect.quoteIdentifier(c)).join(', ')}) VALUES ${batch
+          .map((_, r) => {
+            const offset = r * paramCount;
+            return `(${columns.map((_, c) => dialect.parameterPlaceholder(offset + c + 1)).join(', ')})`;
+          })
+          .join(', ')}`,
         params,
       );
       inserted += batch.length;

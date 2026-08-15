@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import type { DialectPort } from '@canvabase/dialects';
 import type { Result, TableDraft } from '@canvabase/contracts';
 import { TableDesignerService } from './TableDesignerService.js';
+import { AuditLogger } from './AuditLogger.js';
 import type { ConnectionManager } from './ConnectionManager.js';
 
 function errorCode(result: Result<unknown>): string | undefined {
@@ -131,18 +132,18 @@ describe('TableDesignerService', () => {
     const dir = await mkdtemp(join(tmpdir(), 'cb-designer-'));
     try {
       const dialect = fakeDialect();
-      const service = new TableDesignerService(fakeConnections(dialect), dir);
+      const service = new TableDesignerService(fakeConnections(dialect), new AuditLogger(dir));
       const result = await service.apply({ connectionId: 'c1', draft });
       expect(result).toEqual(expect.objectContaining({ ok: true, data: { applied: true } }));
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(dialect.execute).toHaveBeenCalledOnce();
 
-      const audit = JSON.parse(await readFile(join(dir, 'designer-audit.json'), 'utf8')) as Array<{
+      const audit = JSON.parse(await readFile(join(dir, 'audit-log.json'), 'utf8')) as Array<{
         action: string;
-        table: string;
+        target: string;
       }>;
-      expect(audit[0]?.action).toBe('apply');
-      expect(audit[0]?.table).toBe('orders');
+      expect(audit[0]?.action).toBe('designer.apply');
+      expect(audit[0]?.target).toBe('orders');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -162,17 +163,16 @@ describe('TableDesignerService', () => {
     const dir = await mkdtemp(join(tmpdir(), 'cb-designer-'));
     try {
       const dialect = fakeDialect();
-      const service = new TableDesignerService(fakeConnections(dialect), dir);
+      const service = new TableDesignerService(fakeConnections(dialect), new AuditLogger(dir));
       const result = await service.drop('c1', 'orders');
       expect(result).toEqual(expect.objectContaining({ ok: true, data: { dropped: true } }));
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(dialect.execute).toHaveBeenCalledWith('DROP TABLE `orders`');
 
-      const audit = JSON.parse(await readFile(join(dir, 'designer-audit.json'), 'utf8')) as Array<{
+      const audit = JSON.parse(await readFile(join(dir, 'audit-log.json'), 'utf8')) as Array<{
         action: string;
-        table: string;
       }>;
-      expect(audit[0]?.action).toBe('drop');
+      expect(audit[0]?.action).toBe('designer.drop');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

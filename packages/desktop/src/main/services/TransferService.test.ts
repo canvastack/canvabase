@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { DialectPort } from '@canvabase/dialects';
 import type { Result, TableColumn } from '@canvabase/contracts';
 import { TransferService } from './TransferService.js';
+import { AuditLogger } from './AuditLogger.js';
 import type { ConnectionManager } from './ConnectionManager.js';
 
 const showSaveDialog = vi.hoisted(() =>
@@ -194,6 +195,22 @@ describe('TransferService.export', () => {
     const result = await service.export({ connectionId: 'c1', format: 'csv', table: 'users' });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.rows).toBe(0);
+  });
+
+  it('export menulis audit log (UU PDP: export data besar)', async () => {
+    const filePath = join(dir, 'out-audit.csv');
+    showSaveDialog.mockResolvedValue({ canceled: false, filePath });
+    const service = new TransferService(fakeConnections(fakeDialect()), undefined, new AuditLogger(dir));
+    const result = await service.export({ connectionId: 'c1', format: 'csv', table: 'users' });
+    expect(result.ok).toBe(true);
+
+    const raw = await readFile(join(dir, 'audit-log.json'), 'utf8');
+    const audit = JSON.parse(raw) as Array<{ action: string; target?: string; connectionId?: string; detail?: Record<string, unknown> }>;
+    const entry = audit.find((e) => e.action === 'transfer.export');
+    expect(entry).toBeDefined();
+    expect(entry?.target).toBe('users');
+    expect(entry?.connectionId).toBe('c1');
+    expect(entry?.detail?.format).toBe('csv');
   });
 });
 

@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import type {
   DesignerApi,
   Result,
@@ -11,14 +8,7 @@ import { fail, ok, tableDraftSchema } from '@canvabase/contracts';
 import type { DialectPort } from '@canvabase/dialects';
 import { toClientError } from '../errors.js';
 import type { ConnectionManager } from './ConnectionManager.js';
-
-interface AuditEntry {
-  id: string;
-  ts: number;
-  action: 'apply' | 'drop';
-  connectionId: string;
-  table: string;
-}
+import type { AuditLogger } from './AuditLogger.js';
 
 /**
  * TableDesignerService — Table Designer (PRD-F-06).
@@ -29,14 +19,10 @@ interface AuditEntry {
  * - `drop`: DROP TABLE — destructive, dicatat ke audit log.
  */
 export class TableDesignerService implements DesignerApi {
-  private readonly auditPath: string;
-
   constructor(
     private readonly connections: ConnectionManager,
-    dataDir?: string,
-  ) {
-    this.auditPath = dataDir ? join(dataDir, 'designer-audit.json') : '';
-  }
+    private readonly audit?: AuditLogger,
+  ) {}
 
   private session(connectionId: string): Result<DialectPort> {
     const session = this.connections.getSession(connectionId);
@@ -103,7 +89,11 @@ export class TableDesignerService implements DesignerApi {
       }
       const sql = session.data.previewDdl(parsed);
       await session.data.execute(sql);
-      await this.appendAudit('apply', input.connectionId, parsed.name);
+      await this.audit?.append({
+        action: 'designer.apply',
+        connectionId: input.connectionId,
+        target: parsed.name,
+      });
       return ok({ applied: true });
     } catch (err) {
       return fail(toClientError(err));
@@ -122,7 +112,11 @@ export class TableDesignerService implements DesignerApi {
     }
     try {
       await session.data.execute(`DROP TABLE ${session.data.quoteIdentifier(name)}`);
-      await this.appendAudit('drop', connectionId, name);
+      await this.audit?.append({
+        action: 'designer.drop',
+        connectionId,
+        target: name,
+      });
       return ok({ dropped: true });
     } catch (err) {
       return fail(toClientError(err));
@@ -133,28 +127,5 @@ export class TableDesignerService implements DesignerApi {
   private parseDraft(draft: unknown): TableDraft | null {
     const parsed = tableDraftSchema.safeParse(draft);
     return parsed.success ? parsed.data : null;
-  }
-
-  private async appendAudit(
-    action: AuditEntry['action'],
-    connectionId: string,
-    table: string,
-  ): Promise<void> {
-    const entry: AuditEntry = { id: randomUUID(), ts: Date.now(), action, connectionId, table };
-    if (!this.auditPath) return;
-    try {
-      let existing: AuditEntry[] = [];
-      try {
-        const raw = await readFile(this.auditPath, 'utf8');
-        existing = JSON.parse(raw) as AuditEntry[];
-      } catch {
-        // first entry
-      }
-      existing.push(entry);
-      await mkdir(join(this.auditPath, '..'), { recursive: true });
-      await writeFile(this.auditPath, JSON.stringify(existing, null, 2), 'utf8');
-    } catch {
-      // audit best-effort — jangan gagalkan operasi utama
-    }
   }
 }
