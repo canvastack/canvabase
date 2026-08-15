@@ -14,7 +14,7 @@ CanvaBase memakai model **open-core dual-repo** (keputusan 2026-08-15, lihat `do
 
 ## Workflow
 
-1. **Fork + branch** dari `main`: `git checkout -b fix/deskripsi-singkat`
+1. **Fork + branch** dari `master` (default branch): `git checkout -b fix/deskripsi-singkat`
 2. Ikuti **Conventional Commits**: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`
 3. Pastikan lulus sebelum submit:
    ```bash
@@ -24,7 +24,14 @@ CanvaBase memakai model **open-core dual-repo** (keputusan 2026-08-15, lihat `do
    npm run build
    ```
 4. Tulis/update **test** untuk perubahan (target coverage ≥80% di `packages/dialects`).
-5. Buka PR ke `main` — deskripsikan perubahan, link issue jika ada.
+5. Buka PR ke `master` — deskripsikan perubahan, link issue jika ada.
+
+## Branching & Rilis
+
+- **`master`** = development line. Semua fitur baru & bugfix masuk ke sini.
+- **Tag `vX.Y.Z`** = rilis. Cek kode versi lama via `git checkout vX.Y.Z` (tag, bukan branch).
+- **Branch `N.x`** = maintenance line, lahir HANYA saat rilis (pola Laravel-style, keputusan 2026-08-15). Backport/security fix untuk versi yang sudah rilis dikerjakan di branch `N.x`, lalu cherry-pick ke `master`.
+- Detail: `AGENTS.md` section "Version Branch Lifecycle" + `docs/licensing.md`.
 
 ## Contributor License Agreement (CLA)
 

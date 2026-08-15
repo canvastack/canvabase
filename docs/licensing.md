@@ -37,6 +37,31 @@ GitHub canvastack/
 4. **Renovate/Dependabot** di repo private otomatis bump versi `@canvabase/core` saat CE rilis → maintenance tidak dobel.
 5. Backend self-hosted masuk EE — operator enterprise pakai Docker Compose Pro.
 
+## Release & Versioning (Laravel-style — keputusan 2026-08-15)
+
+**Tag = rilis, branch `N.x` = maintenance line, `master` = development.**
+
+```
+master (development) ──────●──────●────────→ v1.1, v1.2, v2.0...
+   │ (saat rilis vX.Y.Z)    │      │
+   └── buat branch N.x ─────┘      └── backport/hotfix → cherry-pick ke master
+   └── cut tag vX.Y.Z
+```
+
+| Event | Tindakan |
+|-------|----------|
+| Rilis baru (vX.Y.Z) | bump version → CHANGELOG → commit → tag `vX.Y.Z` → buat branch `N.x` (major/minor pertama) → push tag+branch → GitHub Release |
+| Backport/hotfix (vX.Y.Z+1) | Kerjakan di branch `N.x` → tag baru → cherry-pick ke master |
+| Cek kode versi lama | `git checkout vX.Y.Z` (tag, bukan branch) |
+| Branch `N.x` lahir | HANYA saat rilis — mencegah snapshot yang tidak berarti |
+
+**Relevansi ke open-core:**
+- CE di-release sebagai **GitHub Releases** (installer) + npm package `@canvabase/core` — masing-masing berversi SemVer.
+- Maintenance branch `N.x` jadi tempat **security backport** untuk versi CE yang sudah dirilis — penting karena EE consume `@canvabase/core` versi tertentu (Renovate/Dependabot di repo private akan naik versi saat CE rilis baru).
+- EE punya siklus rilis sendiri di repo private; versi `@canvabase/core` yang di-pin dicatat sebagai dependency constraint.
+
+**Catatan 2026-08-15:** branch `v1.0` (snapshot identik origin/master) dihapus, tag `v1.0` dipindah ke master HEAD 3b05f52 (state release nyata termasuk G4-5). Branch `1.x` akan dibuat saat rilis v1.0.0. Detail pola: `AGENTS.md` section "Version Branch Lifecycle".
+
 ## Lisensi
 
 | Artifact | Lisensi | Alasan |
