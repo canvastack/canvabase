@@ -172,7 +172,7 @@ export function App(): JSX.Element {
             <div className="cb-splash-loader">
               <div className="cb-splash-progress"></div>
             </div>
-            <span className="cb-splash-version">v0.1.0</span>
+            <span className="cb-splash-version">v1.0.0</span>
           </div>
         </div>
       )}

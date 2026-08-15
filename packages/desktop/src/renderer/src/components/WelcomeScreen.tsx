@@ -34,7 +34,7 @@ export function WelcomeScreen({ store, onOpenNewConnection }: WelcomeScreenProps
           <div className="cb-welcome-hero-text">
             <div className="cb-welcome-title-row">
               <h1 className="cb-welcome-title">CanvaBase</h1>
-              <span className="cb-welcome-badge">v0.1.0-mvp</span>
+              <span className="cb-welcome-badge">v1.0.0</span>
             </div>
             <p className="cb-welcome-desc">
               High-performance modern database desktop client & ERD modeler for MySQL, PostgreSQL, and SQLite.

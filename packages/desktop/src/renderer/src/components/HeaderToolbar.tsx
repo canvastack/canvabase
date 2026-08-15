@@ -93,7 +93,7 @@ export function HeaderToolbar({
           >
             <img src={logoUrl} className="cb-brand-logo-img" alt="CanvaBase Logo" />
             <div className="cb-brand-title">
-              CanvaBase <span className="cb-brand-badge">v0.1.0</span>
+              CanvaBase <span className="cb-brand-badge">v1.0.0</span>
             </div>
           </button>
 
