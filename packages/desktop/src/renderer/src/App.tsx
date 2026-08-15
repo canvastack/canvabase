@@ -8,6 +8,9 @@ import { QueryEditor } from './components/QueryEditor';
 import { ResultGrid } from './components/ResultGrid';
 import { TableDesigner } from './components/TableDesigner';
 import { DatabaseDashboard } from './components/DatabaseDashboard';
+import { RoleManager } from './components/RoleManager/RoleManager';
+import { HistoryLog } from './components/HistoryLog/HistoryLog';
+import { ServerMonitor } from './components/ServerMonitor/ServerMonitor';
 import { StatusBar } from './components/StatusBar';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ConnectionModal } from './components/ConnectionModal';
@@ -251,6 +254,24 @@ export function App(): JSX.Element {
               {activeView === 'database' && (
                 <div className="view-container database-view">
                   <DatabaseDashboard store={store} />
+                </div>
+              )}
+
+              {activeView === 'role' && (
+                <div className="view-container role-view h-full w-full">
+                  <RoleManager store={store} />
+                </div>
+              )}
+
+              {activeView === 'history_log' && (
+                <div className="view-container history-log-view h-full w-full">
+                  <HistoryLog store={store} />
+                </div>
+              )}
+
+              {activeView === 'server_monitor' && (
+                <div className="view-container server-monitor-view h-full w-full">
+                  <ServerMonitor store={store} />
                 </div>
               )}
             </>
