@@ -20,6 +20,8 @@ import { transferProgressSchema } from '@canvabase/contracts';
 import { coerceCellValue, pkValues } from './lib/gridOps';
 import type { RowFilters, SortState } from './lib/gridOps';
 import { IPC_CHANNELS } from '../../ipc/channels';
+import type { QueryLogEntry } from './components/HistoryLog/types';
+import { formatTimestamp, categorizeSql } from './components/HistoryLog/historyLogUtils';
 
 const CHUNK_SIZE = 500;
 
@@ -116,8 +118,8 @@ interface AppState {
   activeTabId: string;
   savedQueries: SavedQuery[];
   browser: BrowserState;
-  activeView: 'query' | 'designer' | 'erd' | 'database';
-  setActiveView: (view: 'query' | 'designer' | 'erd' | 'database') => void;
+  activeView: 'query' | 'designer' | 'erd' | 'database' | 'role' | 'history_log' | 'server_monitor';
+  setActiveView: (view: 'query' | 'designer' | 'erd' | 'database' | 'role' | 'history_log' | 'server_monitor') => void;
   selectedTarget: InspectorTarget | null;
   setSelectedTarget: (target: InspectorTarget | null) => void;
   designerSection: 'columns' | 'indexes' | 'foreignKeys';
@@ -206,6 +208,9 @@ interface AppState {
   prevGridPage: () => void;
   firstGridPage: () => void;
   lastGridPage: () => void;
+  queryLogs: QueryLogEntry[];
+  addQueryLog: (entry: Omit<QueryLogEntry, 'id' | 'timestamp' | 'formattedTimestamp'>) => void;
+  clearQueryLogs: (serverTarget?: string) => void;
 }
 
 let tabCounter = 0;
@@ -429,6 +434,31 @@ export const createAppStore = (client: Client) => {
       }));
     },
 
+    queryLogs: [],
+
+    addQueryLog: (entry) => {
+      const now = new Date();
+      const newEntry: QueryLogEntry = {
+        ...entry,
+        id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: now.toISOString(),
+        formattedTimestamp: formatTimestamp(now),
+      };
+      set((s) => ({
+        queryLogs: [newEntry, ...s.queryLogs].slice(0, 1000), // keep latest 1000 queries
+      }));
+    },
+
+    clearQueryLogs: (serverTarget) => {
+      if (!serverTarget || serverTarget === 'ALL') {
+        set({ queryLogs: [] });
+      } else {
+        set((s) => ({
+          queryLogs: s.queryLogs.filter((l) => l.serverName !== serverTarget),
+        }));
+      }
+    },
+
     updateConnection: async (id, input: Partial<ConnectionConfig>) => {
       const result = await client.connections.update(id, input);
       if (result.ok) {
@@ -577,11 +607,34 @@ export const createAppStore = (client: Client) => {
             : t,
         ),
       }));
+
+      const startTime = performance.now();
       const result = await client.query.execute({
         connectionId: activeConnectionId,
         sql: tab.sql,
         signalId,
       });
+      const durationMs = Math.max(1, Math.round(performance.now() - startTime));
+
+      const conn = get().connections.find((c) => c.id === activeConnectionId);
+      const serverName = conn?.name ?? 'PostgreSQL';
+      const engine = conn?.engine ?? 'postgresql';
+      const dialectTag = engine.toUpperCase().includes('MYSQL') ? 'MYSQL' : engine.toUpperCase().includes('SQLITE') ? 'SQLITE' : 'PGSQL';
+
+      get().addQueryLog({
+        serverName,
+        connectionId: activeConnectionId,
+        engine,
+        pid: 7724,
+        dialectTag,
+        sql: tab.sql,
+        durationMs,
+        level: result.ok ? 'SUCCESS' : 'ERROR',
+        category: categorizeSql(tab.sql),
+        rowsAffected: result.ok ? result.data.chunk.rows.length : 0,
+        errorMessage: result.ok ? undefined : errorMessage(result.error),
+      });
+
       if (result.ok) {
         set((s) => ({
           tabs: s.tabs.map((t) =>
@@ -758,10 +811,31 @@ export const createAppStore = (client: Client) => {
             : t,
         ),
       }));
+      const startTime = performance.now();
       const [schema, opened] = await Promise.all([
         client.data.getSchema({ connectionId: activeConnectionId, table }),
         client.data.openTable({ connectionId: activeConnectionId, table }),
       ]);
+      const durationMs = Math.max(1, Math.round(performance.now() - startTime));
+
+      const conn = get().connections.find((c) => c.id === activeConnectionId);
+      const serverName = conn?.name ?? 'PostgreSQL';
+      const engine = conn?.engine ?? 'postgresql';
+      const dialectTag = engine.toUpperCase().includes('MYSQL') ? 'MYSQL' : engine.toUpperCase().includes('SQLITE') ? 'SQLITE' : 'PGSQL';
+
+      get().addQueryLog({
+        serverName,
+        connectionId: activeConnectionId,
+        engine,
+        pid: 7724,
+        dialectTag,
+        sql: defaultSql,
+        durationMs,
+        level: opened.ok && schema.ok ? 'SUCCESS' : 'ERROR',
+        category: 'DML',
+        rowsAffected: opened.ok ? opened.data.chunk.rows.length : 0,
+      });
+
       if (opened.ok && schema.ok) {
         set((s) => ({
           tabs: s.tabs.map((t) =>
