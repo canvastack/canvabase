@@ -91,6 +91,18 @@ describe('sqlCodec danger guard', () => {
     }
   });
 
+  it('blocks full-table DML without WHERE', () => {
+    for (const stmt of ['DELETE FROM users', 'DELETE FROM users;', 'UPDATE users SET x = 1', 'REPLACE INTO users VALUES (1)']) {
+      expect(isDangerousStatement(stmt)).toBe(true);
+    }
+  });
+
+  it('allows scoped DML with WHERE', () => {
+    for (const stmt of ['DELETE FROM users WHERE id = 5', 'UPDATE users SET x = 1 WHERE id = 5', 'DELETE FROM audit_log WHERE created_at < NOW()']) {
+      expect(isDangerousStatement(stmt)).toBe(false);
+    }
+  });
+
   it('allows safe DML/DDL', () => {
     for (const stmt of ['SELECT * FROM users', 'INSERT INTO users VALUES (1)', 'CREATE TABLE t (id INT)']) {
       expect(isDangerousStatement(stmt)).toBe(false);

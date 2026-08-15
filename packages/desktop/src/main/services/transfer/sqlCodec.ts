@@ -126,8 +126,10 @@ export function splitSqlStatements(sql: string): string[] {
 }
 
 /** Statement berbahaya yang diblokir saat SQL import (proteksi destruktif). */
-const DANGEROUS_PATTERN = /^\s*(drop|alter|truncate|grant|revoke|create\s+user|set\s+password)\b/i;
+const DANGEROUS_PATTERN = /^\s*(drop|alter|truncate|grant|revoke|create\s+user|set\s+password|replace)\b/i;
 
 export function isDangerousStatement(statement: string): boolean {
-  return DANGEROUS_PATTERN.test(statement);
+  if (DANGEROUS_PATTERN.test(statement)) return true;
+  if (/^\s*(delete|update)\b/i.test(statement) && !/\bwhere\b/i.test(statement)) return true;
+  return false;
 }

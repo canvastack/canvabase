@@ -22,8 +22,30 @@ export function csvEncodeField(value: unknown, opts: CsvEncodeOptions): string {
   return `${quote}${raw.split(quote).join(quote + quote)}${quote}`;
 }
 
+/** Neutralisasi formula injection (CSV) — prefix tick pada cell berbahaya. */
+const FORMULA_PATTERN = /^[\s]*[=+\-@]/;
+
+export function csvSafeField(value: unknown, opts: CsvEncodeOptions): string {
+  const encoded = csvEncodeField(value, opts);
+  const raw =
+    value === null || value === undefined
+      ? ''
+      : typeof value === 'string'
+        ? value
+        : encoded.replace(new RegExp(`^${opts.quote}`), '').replace(new RegExp(`${opts.quote}$`), '');
+  if (FORMULA_PATTERN.test(raw)) {
+    return `'${encoded}`;
+  }
+  return encoded;
+}
+
 export function csvEncodeRow(values: unknown[], opts: CsvEncodeOptions): string {
   return values.map((v) => csvEncodeField(v, opts)).join(opts.separator);
+}
+
+/** Sama seperti csvEncodeRow + neutralisasi formula injection (safe untuk export). */
+export function csvEncodeRowSafe(values: unknown[], opts: CsvEncodeOptions): string {
+  return values.map((v) => csvSafeField(v, opts)).join(opts.separator);
 }
 
 /** Decode satu baris CSV — streamable (state di-carry antar chunk). */

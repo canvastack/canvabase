@@ -3,6 +3,8 @@ import {
   createCsvParserState,
   csvEncodeField,
   csvEncodeRow,
+  csvEncodeRowSafe,
+  csvSafeField,
   csvParse,
 } from './csvCodec.js';
 
@@ -28,6 +30,25 @@ describe('csvCodec encode', () => {
 
   it('encodes a full row joined by separator', () => {
     expect(csvEncodeRow(['id', 'a,b', null], opts)).toBe('id,"a,b",');
+  });
+});
+
+describe('csvCodec formula-injection safety', () => {
+  it('prefixes leading formula characters with a tick', () => {
+    expect(csvSafeField('=SUM(A1)', opts)).toBe("'=SUM(A1)");
+    expect(csvSafeField('+2+3', opts)).toBe("'+2+3");
+    expect(csvSafeField('@cmd', opts)).toBe("'@cmd");
+    expect(csvSafeField('-1', opts)).toBe("'-1");
+  });
+
+  it('does not touch benign fields', () => {
+    expect(csvSafeField('hello', opts)).toBe('hello');
+    expect(csvSafeField('a,b', opts)).toBe('"a,b"');
+    expect(csvSafeField(null, opts)).toBe('');
+  });
+
+  it('safe row encoding neutralizes formulas', () => {
+    expect(csvEncodeRowSafe(['=1+1', 'name'], opts)).toBe("'=1+1,name");
   });
 });
 
