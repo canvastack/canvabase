@@ -24,6 +24,36 @@ describe('History Log Utility & Enterprise Features Tests', () => {
       const sql = 'SELECT * FROM users WHERE active = true;';
       expect(maskSensitiveCredentials(sql)).toBe(sql);
     });
+
+    it('masks CREATE USER / ALTER USER password values', () => {
+      const sql1 = "CREATE USER 'analyst' IDENTIFIED BY 'topsecret';";
+      const masked1 = maskSensitiveCredentials(sql1);
+      expect(masked1).not.toContain('topsecret');
+      expect(masked1).toContain('********');
+
+      const sql2 = "ALTER USER 'app' WITH PASSWORD 'p@ssw0rd!';";
+      const masked2 = maskSensitiveCredentials(sql2);
+      expect(masked2).not.toContain('p@ssw0rd!');
+    });
+
+    it('masks password in formatLogEntry output', () => {
+      const entry: QueryLogEntry = {
+        id: '1',
+        timestamp: '2026-08-15T01:00:00.000Z',
+        formattedTimestamp: '2026-08-15 01:00:00.000',
+        serverName: 'PostgreSQL',
+        engine: 'postgresql',
+        pid: 7724,
+        dialectTag: 'PGSQL',
+        sql: "CREATE USER 'jdoe' IDENTIFIED BY 'hunter2';",
+        durationMs: 10,
+        level: 'SUCCESS',
+        category: 'DCL',
+      };
+      const formatted = formatLogEntry(entry);
+      expect(formatted).not.toContain('hunter2');
+      expect(formatted).toContain('********');
+    });
   });
 
   describe('categorizeSql', () => {
@@ -192,9 +222,9 @@ describe('History Log Utility & Enterprise Features Tests', () => {
 
     it('exports log entries to sanitized JSON array', () => {
       const jsonStr = exportLogsToJson([entry]);
-      const parsed = JSON.parse(jsonStr);
+      const parsed = JSON.parse(jsonStr) as Array<{ serverName: string }>;
       expect(parsed).toHaveLength(1);
-      expect(parsed[0].serverName).toBe('PostgreSQL');
+      expect(parsed[0]?.serverName).toBe('PostgreSQL');
     });
   });
 });

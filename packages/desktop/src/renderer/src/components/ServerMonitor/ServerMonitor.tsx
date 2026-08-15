@@ -37,8 +37,7 @@ interface ServerMonitorProps {
  * activeConnectionId and disrupt the user's main workflow.
  */
 function getClient(): typeof window.canvabase {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window as any).canvabase;
+  return window.canvabase;
 }
 
 export function ServerMonitor({ store }: ServerMonitorProps): JSX.Element {

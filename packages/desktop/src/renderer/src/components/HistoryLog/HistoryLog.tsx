@@ -6,6 +6,7 @@ import {
   filterLogEntries,
   exportLogsToCsv,
   exportLogsToJson,
+  maskSensitiveCredentials,
 } from './historyLogUtils';
 
 interface HistoryLogProps {
@@ -296,7 +297,7 @@ export function HistoryLog({ store }: HistoryLogProps): JSX.Element {
 
                     <button
                       type="button"
-                      onClick={() => handleExplainInEditor(entry.sql)}
+                      onClick={() => handleExplainInEditor(maskSensitiveCredentials(entry.sql))}
                       className="role-mgr-btn"
                       style={{ padding: '1px 6px', fontSize: '10px' }}
                       title="Explain Analyze query in Query Editor"
@@ -305,7 +306,7 @@ export function HistoryLog({ store }: HistoryLogProps): JSX.Element {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleCopySql(entry.sql)}
+                      onClick={() => handleCopySql(maskSensitiveCredentials(entry.sql))}
                       className="role-mgr-btn"
                       style={{ padding: '1px 6px', fontSize: '10px' }}
                       title="Copy SQL to Clipboard"
@@ -325,7 +326,7 @@ export function HistoryLog({ store }: HistoryLogProps): JSX.Element {
                     overflowX: wordWrap ? 'hidden' : 'auto',
                   }}
                 >
-                  {entry.sql}
+                  {maskSensitiveCredentials(entry.sql)}
                 </div>
 
                 {/* Error Banner if any */}

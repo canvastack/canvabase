@@ -1,6 +1,15 @@
 // packages/desktop/src/renderer/src/components/ServerMonitor/serverMonitorUtils.ts
 import type { ServerProcess, LockDependency, ServerVariable, ServerHealthMetrics } from './types';
 
+/** Stringify nilai row SQL tanpa fallback '[object Object]'. */
+function cellString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return value.toString();
+  if (typeof value === 'object') return JSON.stringify(value);
+  return JSON.stringify(value);
+}
+
 /** PostgreSQL query to fetch active processes matching Navicat Premium (1 row per PID) */
 export function getPostgresProcessListSql(): string {
   return `
@@ -125,15 +134,15 @@ export function getTerminateConnectionSql(pid: number, engine = 'postgresql'): s
 export function parsePostgresProcessRows(rows: Record<string, unknown>[], serverName: string): ServerProcess[] {
   return rows.map((r) => {
     const pid = Number(r.id ?? r.pid ?? 0);
-    const user = r.user ? String(r.user) : null;
-    const host = r.host ? String(r.host) : null;
+    const user = r.user ? cellString(r.user) : null;
+    const host = r.host ? cellString(r.host) : null;
     const port = r.port ? Number(r.port) : null;
-    const db = r.db ? String(r.db) : null;
-    const command = r.command ? String(r.command) : '';
-    const state = r.state ? String(r.state) : null;
-    const duration = r.time ? String(r.time) : (r.duration ? String(r.duration) : '00:00:00');
+    const db = r.db ? cellString(r.db) : null;
+    const command = r.command ? cellString(r.command) : '';
+    const state = r.state ? cellString(r.state) : null;
+    const duration = r.time ? cellString(r.time) : (r.duration ? cellString(r.duration) : '00:00:00');
     const durationSec = Number(r.duration_sec ?? 0);
-    const info = r.info ? String(r.info) : (r.Info ? String(r.Info) : undefined);
+    const info = r.info ? cellString(r.info) : (r.Info ? cellString(r.Info) : undefined);
 
     const isBlocker = state?.toLowerCase().includes('exclusive') || state?.toLowerCase().includes('blocker');
     const isBlocked = state?.toLowerCase().includes('waiting') || state?.toLowerCase().includes('blocked');
@@ -160,8 +169,8 @@ export function parsePostgresProcessRows(rows: Record<string, unknown>[], server
 export function parseMysqlProcessRows(rows: Record<string, unknown>[], serverName: string): ServerProcess[] {
   return rows.map((r) => {
     const pid = Number(r.Id ?? r.id ?? 0);
-    const user = r.User ? String(r.User) : null;
-    const hostRaw = r.Host ? String(r.Host) : '';
+    const user = r.User ? cellString(r.User) : null;
+    const hostRaw = r.Host ? cellString(r.Host) : '';
     let host: string | null = null;
     let port: number | null = null;
 
@@ -171,12 +180,12 @@ export function parseMysqlProcessRows(rows: Record<string, unknown>[], serverNam
       if (parts[1]) port = parseInt(parts[1], 10);
     }
 
-    const db = r.db ? String(r.db) : null;
-    const command = r.Command ? String(r.Command) : '';
-    const state = r.State ? String(r.State) : (command === 'Sleep' ? 'idle' : null);
+    const db = r.db ? cellString(r.db) : null;
+    const command = r.Command ? cellString(r.Command) : '';
+    const state = r.State ? cellString(r.State) : (command === 'Sleep' ? 'idle' : null);
     const durationSec = Number(r.Time ?? r.time ?? 0);
     const duration = `${durationSec}s`;
-    const info = r.Info ? String(r.Info) : undefined;
+    const info = r.Info ? cellString(r.Info) : undefined;
     const fullCommand = info && info !== '(Null)' ? info : command;
 
     const isBlocker = state?.toLowerCase().includes('locked') || state?.toLowerCase().includes('metadata lock');
@@ -204,8 +213,8 @@ export function parseMysqlProcessRows(rows: Record<string, unknown>[], serverNam
 export function parseVariablesRows(rows: Record<string, unknown>[], isMysql = false): ServerVariable[] {
   if (isMysql) {
     return rows.map((r) => ({
-      name: String(r.Variable_name ?? r.name ?? ''),
-      setting: String(r.Value ?? r.setting ?? ''),
+      name: cellString(r.Variable_name ?? r.name ?? ''),
+      setting: cellString(r.Value ?? r.setting ?? ''),
       unit: null,
       category: 'System Variable',
       shortDesc: 'MySQL Server System Variable',
@@ -213,11 +222,11 @@ export function parseVariablesRows(rows: Record<string, unknown>[], isMysql = fa
   }
 
   return rows.map((r) => ({
-    name: String(r.name ?? ''),
-    setting: String(r.setting ?? ''),
-    unit: r.unit ? String(r.unit) : null,
-    category: String(r.category ?? 'Server Settings'),
-    shortDesc: String(r.short_desc ?? r.shortDesc ?? ''),
+    name: cellString(r.name ?? ''),
+    setting: cellString(r.setting ?? ''),
+    unit: r.unit ? cellString(r.unit) : null,
+    category: cellString(r.category ?? 'Server Settings'),
+    shortDesc: cellString(r.short_desc ?? r.shortDesc ?? ''),
   }));
 }
 
