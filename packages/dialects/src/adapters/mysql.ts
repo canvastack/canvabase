@@ -1,5 +1,6 @@
 import promiseMysql from 'mysql2/promise';
 import { createConnection as createRawConnection, type Connection } from 'mysql2';
+import type { EventEmitter } from 'node:events';
 import type {
   ColumnMetadata,
   StreamedResult,
@@ -71,6 +72,9 @@ export class MySQLAdapter implements DialectPort {
       ...(ssl ? { ssl } : {}),
     });
     this.config = config;
+    (this.pool as unknown as EventEmitter).on('error', (err: Error) => {
+      console.error('[mysql] pool error', err?.message ?? 'unknown pool error');
+    });
     await this.pool.query('SELECT 1');
   }
 
@@ -118,12 +122,14 @@ export class MySQLAdapter implements DialectPort {
     params: unknown[] = [],
   ): Promise<StreamedResult<T>> {
     if (!this.pool || !this.config) throw new Error('mysql: not connected');
+    const ssl = buildSsl(this.config);
     this.streamConn = createRawConnection({
       host: this.config.host,
       port: this.config.port,
       ...(this.config.database ? { database: this.config.database } : {}),
       ...(this.config.username ? { user: this.config.username } : {}),
       ...(this.config.password ? { password: this.config.password } : {}),
+      ...(ssl ? { ssl } : {}),
     });
 
     const query = this.streamConn.query(sql, params);

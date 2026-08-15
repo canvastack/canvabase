@@ -75,6 +75,9 @@ export class PostgreSQLAdapter implements DialectPort {
 
   async connect(config: DialectConnectionConfig, _signal?: AbortSignal): Promise<void> {
     this.pool = new Pool(buildPool(config));
+    this.pool.on('error', (err: Error) => {
+      console.error('[postgresql] pool error', err?.message ?? 'unknown pool error');
+    });
     await this.pool.query('SELECT 1');
   }
 
