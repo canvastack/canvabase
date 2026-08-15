@@ -21,6 +21,18 @@ describe('sanitizeLog', () => {
     expect(sanitizeLog('password=supersecret;')).toContain('[REDACTED]');
     expect(sanitizeLog('password=supersecret;')).not.toContain('supersecret');
   });
+  it('redacts colon form and JSON values', () => {
+    expect(sanitizeLog('password: supersecret')).toContain('[REDACTED]');
+    expect(sanitizeLog('password: supersecret')).not.toContain('supersecret');
+    expect(sanitizeLog('{"password":"hunter2"}')).toContain('[REDACTED]');
+    expect(sanitizeLog('{"password":"hunter2"}')).not.toContain('hunter2');
+  });
+  it('redacts DSN and Bearer credentials', () => {
+    expect(sanitizeLog('mysql://root:toor@host/db')).toContain('[REDACTED]@host');
+    expect(sanitizeLog('mysql://root:toor@host/db')).not.toContain('toor');
+    expect(sanitizeLog('Authorization: Bearer eyJhbGciOiJIUzI1NiJ9')).toContain('[REDACTED]');
+    expect(sanitizeLog('Authorization: Bearer eyJhbGciOiJIUzI1NiJ9')).not.toContain('eyJhbGci');
+  });
 });
 
 describe('snakeToCamel', () => {

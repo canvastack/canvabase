@@ -13,9 +13,14 @@ export function isSqlPrimitive(value: unknown): value is SqlPrimitive {
 }
 
 export function sanitizeLog(value: string): string {
-  return value
-    .replace(/(password\s*=\s*['"]?)[^'"\s;]+/gi, '$1[REDACTED]')
-    .replace(/(?:(pass|pwd|secret|token|key|credential)\b[=:]\s*)\S+/gi, '$1 [REDACTED]');
+  let out = value;
+  out = out.replace(
+    /(["']?)\b(pass(?:word)?|pwd|secret|token|api[_-]?key|key|credential)\b(["']?)\s*[:=]\s*["']?[^"'\s;,&]+/gi,
+    '$1$2$3[REDACTED]',
+  );
+  out = out.replace(/(\w+:\/\/[^:\s/@]+:)[^@\s/]+@/g, '$1[REDACTED]@');
+  out = out.replace(/(\bAuthorization\s*:\s*Bearer\s+)\S+/gi, '$1[REDACTED]');
+  return out;
 }
 
 export function snakeToCamel(name: string): string {

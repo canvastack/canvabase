@@ -386,7 +386,9 @@ Jalankan `npm run test:coverage` untuk laporan coverage.
 ### Perf Scripts & CI
 
 - **`scripts/measure-memory.mjs`**: mengukur memory budget idle & grid secara lokal.
-- **`.github/workflows/performance.yml`**: CI gate yang menjalankan size-limit, memory budget, dan grid benchmark pada setiap push. (Workflow lint/typecheck/package belum dikonfigurasi — hanya `performance.yml` yang aktif saat ini.)
+- **`.github/workflows/quality.yml`**: CI gate lint + typecheck + build packages + test + repo_scan consistency pada setiap PR & push main.
+- **`.github/workflows/security.yml`**: CI gate secret scan (gitleaks), `npm audit --omit=dev`, dan AgentShield scan — PR + push main + cron mingguan.
+- **`.github/workflows/performance.yml`**: CI gate size-limit, memory budget, dan grid benchmark pada setiap push.
 
 ### Mengukur Performa Secara Lokal
 
