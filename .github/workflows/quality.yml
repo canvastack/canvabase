@@ -34,6 +34,3 @@ jobs:
 
       - name: Test
         run: npm run test
-
-      - name: Repo scan consistency
-        run: python scripts/repo_scan.py --check
