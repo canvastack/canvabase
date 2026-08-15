@@ -3,120 +3,10 @@ import { useState, useEffect, useRef, type JSX } from 'react';
 import type { AppStore } from '../../store';
 import type { QueryLogEntry, HistoryLogFilter } from './types';
 import {
-  formatTimestamp,
   filterLogEntries,
   exportLogsToCsv,
   exportLogsToJson,
 } from './historyLogUtils';
-
-const SEED_LOGS: QueryLogEntry[] = [
-  {
-    id: 'log_1',
-    timestamp: new Date(Date.now() - 60000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 60000)),
-    serverName: 'PostgreSQL',
-    engine: 'postgresql',
-    pid: 7724,
-    dialectTag: 'PGSQL',
-    sql: "SELECT rolvaliduntil AS expiry_date, rolconfig, pg_catalog.shobj_description(oid, 'pg_authid') AS comment FROM pg_roles ORDER BY rolname ASC",
-    durationMs: 10,
-    level: 'SUCCESS',
-    category: 'DML',
-    rowsAffected: 20,
-  },
-  {
-    id: 'log_2',
-    timestamp: new Date(Date.now() - 50000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 50000)),
-    serverName: 'Localhost',
-    engine: 'mysql',
-    pid: 48,
-    dialectTag: 'MYSQL',
-    sql: 'SHOW FULL TABLES WHERE Table_type = "BASE TABLE";',
-    durationMs: 14,
-    level: 'SUCCESS',
-    category: 'SYSTEM',
-    rowsAffected: 12,
-  },
-  {
-    id: 'log_3',
-    timestamp: new Date(Date.now() - 45000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 45000)),
-    serverName: 'PostgreSQL',
-    engine: 'postgresql',
-    pid: 7724,
-    dialectTag: 'PGSQL',
-    sql: "SELECT COUNT(*) FROM pg_class c LEFT JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = ANY ('{r,v,m}'::char[]) UNION SELECT COUNT(*) FROM pg_attribute a JOIN pg_class c ON a.attrelid = c.oid JOIN pg_namespace n ON c.relnamespace = n.oid JOIN pg_type tp ON tp.typelem = a.atttypid WHERE a.attnum > 0 UNION SELECT COUNT(*) FROM information_schema.routines",
-    durationMs: 116,
-    level: 'SUCCESS',
-    category: 'SYSTEM',
-  },
-  {
-    id: 'log_4',
-    timestamp: new Date(Date.now() - 35000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 35000)),
-    serverName: 'Localhost',
-    engine: 'mysql',
-    pid: 48,
-    dialectTag: 'MYSQL',
-    sql: 'SELECT user, host, plugin FROM mysql.user ORDER BY user ASC;',
-    durationMs: 4,
-    level: 'SUCCESS',
-    category: 'DML',
-  },
-  {
-    id: 'log_5',
-    timestamp: new Date(Date.now() - 30000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 30000)),
-    serverName: 'PostgreSQL',
-    engine: 'postgresql',
-    pid: 7724,
-    dialectTag: 'PGSQL',
-    sql: "SELECT n.nspname, c.relname, c.relkind FROM pg_class c LEFT JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = ANY ('{r,v,m}'::char[]) ORDER BY n.nspname, c.relkind, c.relname",
-    durationMs: 1,
-    level: 'SUCCESS',
-    category: 'SYSTEM',
-  },
-  {
-    id: 'log_6',
-    timestamp: new Date(Date.now() - 20000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 20000)),
-    serverName: 'Localhost',
-    engine: 'mysql',
-    pid: 52,
-    dialectTag: 'MYSQL',
-    sql: 'SELECT * FROM information_schema.innodb_trx;',
-    durationMs: 8,
-    level: 'SUCCESS',
-    category: 'SYSTEM',
-  },
-  {
-    id: 'log_7',
-    timestamp: new Date(Date.now() - 10000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 10000)),
-    serverName: 'PostgreSQL',
-    engine: 'postgresql',
-    pid: 12192,
-    dialectTag: 'PGSQL',
-    sql: 'SELECT r1.rolname AS role, r2.rolname AS member_name, m.admin_option AS admin_option FROM pg_roles r1, pg_auth_members m, pg_roles r2 WHERE r1.oid = m.roleid AND m.member = r2.oid',
-    durationMs: 1,
-    level: 'SUCCESS',
-    category: 'DCL',
-  },
-  {
-    id: 'log_8',
-    timestamp: new Date(Date.now() - 2000).toISOString(),
-    formattedTimestamp: formatTimestamp(new Date(Date.now() - 2000)),
-    serverName: 'PostgreSQL',
-    engine: 'postgresql',
-    pid: 7724,
-    dialectTag: 'PGSQL',
-    sql: "SELECT c.oid, n.nspname AS schemaname, c.relname AS tablename, c.relacl, pg_get_userbyid(c.relowner) AS tableowner, obj_description(c.oid) AS description FROM pg_class c LEFT JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ((c.relkind = 'r'::\"char\") OR (c.relkind = 'f'::\"char\") OR (c.relkind = 'p'::\"char\")) AND n.nspname = 'public' ORDER BY schemaname, tablename",
-    durationMs: 69,
-    level: 'SUCCESS',
-    category: 'DML',
-  },
-];
 
 interface HistoryLogProps {
   store: AppStore;
@@ -138,14 +28,10 @@ export function HistoryLog({ store }: HistoryLogProps): JSX.Element {
   const [wordWrap, setWordWrap] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(new Date().toLocaleTimeString());
-  const [clearedSeed, setClearedSeed] = useState(false);
   const logScrollRef = useRef<HTMLDivElement>(null);
 
-  // Combine dynamic live logs from store with initial seed logs
-  const allLogs: QueryLogEntry[] = [
-    ...storeQueryLogs,
-    ...(clearedSeed ? [] : SEED_LOGS),
-  ];
+  // Live logs from store (only real executed queries, no seed/mock data)
+  const allLogs: QueryLogEntry[] = storeQueryLogs;
 
   // Available server options for dropdown
   const serverOptions = [
@@ -167,9 +53,6 @@ export function HistoryLog({ store }: HistoryLogProps): JSX.Element {
 
   const handleClear = (): void => {
     clearStoreLogs(filter.serverTarget);
-    if (filter.serverTarget === 'ALL') {
-      setClearedSeed(true);
-    }
   };
 
   const handleExportCsv = (): void => {
