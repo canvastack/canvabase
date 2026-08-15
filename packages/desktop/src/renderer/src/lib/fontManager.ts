@@ -115,7 +115,7 @@ export async function getAvailableFonts(): Promise<{ ui: string[]; mono: string[
 /**
  * Dynamically import a Google Font by family name or stylesheet URL.
  */
-export async function importGoogleFont(familyOrUrl: string): Promise<{ ok: boolean; family: string; error?: string }> {
+export function importGoogleFont(familyOrUrl: string): Promise<{ ok: boolean; family: string; error?: string }> {
   let fontName = familyOrUrl.trim();
   let href = '';
 
@@ -148,9 +148,9 @@ export async function importGoogleFont(familyOrUrl: string): Promise<{ ok: boole
       localStorage.setItem(GOOGLE_FONTS_STORAGE_KEY, JSON.stringify(saved));
     }
 
-    return { ok: true, family: fontName };
+    return Promise.resolve({ ok: true, family: fontName });
   } catch (err) {
-    return { ok: false, family: fontName, error: (err as Error).message || 'Failed to load font' };
+    return Promise.resolve({ ok: false, family: fontName, error: (err as Error).message || 'Failed to load font' });
   }
 }
 

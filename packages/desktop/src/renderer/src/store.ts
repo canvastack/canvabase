@@ -19,6 +19,7 @@ import type {
 import { transferProgressSchema } from '@canvabase/contracts';
 import { coerceCellValue, pkValues } from './lib/gridOps';
 import type { RowFilters, SortState } from './lib/gridOps';
+import { dialectTag, openProcedureSql, openTriggerSql, openUserSql, quoteIdent } from './lib/dialect';
 import { IPC_CHANNELS } from '../../ipc/channels';
 import type { QueryLogEntry } from './components/HistoryLog/types';
 import { formatTimestamp, categorizeSql } from './components/HistoryLog/historyLogUtils';
@@ -37,6 +38,7 @@ export interface QueryTab {
   title: string;
   sql: string;
   running: boolean;
+  signalId: string | null;
   columns: ColumnMetadata[];
   rows: Record<string, unknown>[];
   hasMore: boolean;
@@ -143,6 +145,7 @@ interface AppState {
     database: string;
     username: string;
     password: string;
+    ssl: 'disabled' | 'required' | 'verify';
   }) => Promise<boolean>;
   connect: (id: string) => Promise<{ ok: boolean; error?: string }>;
   disconnect: (id: string) => Promise<void>;
@@ -226,6 +229,7 @@ function emptyTab(): QueryTab {
     title: 'Untitled',
     sql: '',
     running: false,
+    signalId: null,
     columns: [],
     rows: [],
     hasMore: false,
@@ -603,7 +607,7 @@ export const createAppStore = (client: Client) => {
       set((s) => ({
         tabs: s.tabs.map((t) =>
           t.id === activeTabId
-            ? { ...t, running: true, error: null, columns: [], rows: [], hasMore: false, table: null, schema: [], sort: null, filters: {} }
+            ? { ...t, running: true, signalId, error: null, columns: [], rows: [], hasMore: false, table: null, schema: [], sort: null, filters: {} }
             : t,
         ),
       }));
@@ -619,14 +623,14 @@ export const createAppStore = (client: Client) => {
       const conn = get().connections.find((c) => c.id === activeConnectionId);
       const serverName = conn?.name ?? 'PostgreSQL';
       const engine = conn?.engine ?? 'postgresql';
-      const dialectTag = engine.toUpperCase().includes('MYSQL') ? 'MYSQL' : engine.toUpperCase().includes('SQLITE') ? 'SQLITE' : 'PGSQL';
+      const tag = dialectTag(engine);
 
       get().addQueryLog({
         serverName,
         connectionId: activeConnectionId,
         engine,
         pid: 7724,
-        dialectTag,
+        dialectTag: tag,
         sql: tab.sql,
         durationMs,
         level: result.ok ? 'SUCCESS' : 'ERROR',
@@ -645,6 +649,7 @@ export const createAppStore = (client: Client) => {
                   rows: result.data.chunk.rows,
                   hasMore: result.data.chunk.hasMore,
                   running: false,
+                  signalId: null,
                 }
               : t,
           ),
@@ -652,7 +657,7 @@ export const createAppStore = (client: Client) => {
       } else {
         set((s) => ({
           tabs: s.tabs.map((t) =>
-            t.id === activeTabId ? { ...t, running: false, error: errorMessage(result.error) } : t,
+            t.id === activeTabId ? { ...t, running: false, signalId: null, error: errorMessage(result.error) } : t,
           ),
         }));
       }
@@ -694,9 +699,12 @@ export const createAppStore = (client: Client) => {
 
     cancelQuery: async () => {
       const { activeTabId } = get();
-      await client.query.cancel(`q-${Date.now()}-${signalCounter++}`);
+      const tab = get().tabs.find((t) => t.id === activeTabId);
+      if (!tab?.running || !tab.signalId) return;
+      const { signalId } = tab;
+      await client.query.cancel(signalId);
       set((s) => ({
-        tabs: s.tabs.map((t) => (t.id === activeTabId ? { ...t, running: false } : t)),
+        tabs: s.tabs.map((t) => (t.id === activeTabId ? { ...t, running: false, signalId: null } : t)),
       }));
     },
 
@@ -785,7 +793,9 @@ export const createAppStore = (client: Client) => {
       }
       if (curTab && curTab.running) return false;
 
-      const defaultSql = `SELECT * FROM ${table} LIMIT 500;`;
+      const conn = get().connections.find((c) => c.id === activeConnectionId);
+      const engine = conn?.engine ?? 'postgresql';
+      const defaultSql = `SELECT * FROM ${quoteIdent(engine, table)} LIMIT 500;`;
       set((s) => ({
         selectedTable: table,
         activeTabId: targetTabId,
@@ -818,17 +828,15 @@ export const createAppStore = (client: Client) => {
       ]);
       const durationMs = Math.max(1, Math.round(performance.now() - startTime));
 
-      const conn = get().connections.find((c) => c.id === activeConnectionId);
       const serverName = conn?.name ?? 'PostgreSQL';
-      const engine = conn?.engine ?? 'postgresql';
-      const dialectTag = engine.toUpperCase().includes('MYSQL') ? 'MYSQL' : engine.toUpperCase().includes('SQLITE') ? 'SQLITE' : 'PGSQL';
+      const tag = dialectTag(engine);
 
       get().addQueryLog({
         serverName,
         connectionId: activeConnectionId,
         engine,
         pid: 7724,
-        dialectTag,
+        dialectTag: tag,
         sql: defaultSql,
         durationMs,
         level: opened.ok && schema.ok ? 'SUCCESS' : 'ERROR',
@@ -866,7 +874,8 @@ export const createAppStore = (client: Client) => {
 
     openProcedure: (procedureName) => {
       const conn = get().connections.find((c) => c.id === get().activeConnectionId);
-      const sql = conn?.engine === 'mysql' ? `CALL ${procedureName}();` : `SELECT * FROM ${procedureName}();`;
+      const engine = conn?.engine ?? 'postgresql';
+      const sql = openProcedureSql(engine, procedureName);
       const tab = emptyTab();
       tab.title = procedureName;
       tab.sql = sql;
@@ -875,9 +884,8 @@ export const createAppStore = (client: Client) => {
 
     openTrigger: (triggerName) => {
       const conn = get().connections.find((c) => c.id === get().activeConnectionId);
-      const sql = conn?.engine === 'mysql'
-        ? `SHOW CREATE TRIGGER ${triggerName};`
-        : `SELECT * FROM information_schema.triggers WHERE trigger_name = '${triggerName}';`;
+      const engine = conn?.engine ?? 'postgresql';
+      const sql = openTriggerSql(engine, triggerName);
       const tab = emptyTab();
       tab.title = triggerName;
       tab.sql = sql;
@@ -886,9 +894,8 @@ export const createAppStore = (client: Client) => {
 
     openUser: (userName) => {
       const conn = get().connections.find((c) => c.id === get().activeConnectionId);
-      const sql = conn?.engine === 'mysql'
-        ? `SHOW GRANTS FOR '${userName}';`
-        : `SELECT * FROM pg_catalog.pg_roles WHERE rolname = '${userName}';`;
+      const engine = conn?.engine ?? 'postgresql';
+      const sql = openUserSql(engine, userName);
       const tab = emptyTab();
       tab.title = userName;
       tab.sql = sql;
