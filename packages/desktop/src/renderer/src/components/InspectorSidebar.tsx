@@ -1,5 +1,7 @@
 import { useState, type JSX } from 'react';
 import type { AppStore } from '../store';
+import { stringifyCell } from '../lib/gridOps';
+import { defaultSchemaName, defaultTablespace } from '../lib/dialect';
 
 interface InspectorSidebarProps {
   store: AppStore;
@@ -36,7 +38,7 @@ export function InspectorSidebar({ store }: InspectorSidebarProps): JSX.Element 
     : null;
 
   // Metadata properties
-  const schemaName = selectedTableNode?.schema || (activeConnection?.engine === 'sqlite' ? 'main' : activeConnection?.engine === 'postgresql' ? 'public' : 'dbo');
+  const schemaName = selectedTableNode?.schema || defaultSchemaName(activeConnection?.engine ?? 'postgresql');
   const tableName = effectiveTableName;
   const tableType = selectedTableNode?.type || (activeTab?.table ? 'BASE TABLE' : 'N/A');
   const rowCount = selectedTableNode?.rows !== null && selectedTableNode?.rows !== undefined
@@ -45,7 +47,7 @@ export function InspectorSidebar({ store }: InspectorSidebarProps): JSX.Element 
     ? activeTab.rows.length.toLocaleString()
     : '0';
   const owner = activeConnection?.username || 'root';
-  const tablespace = selectedTableNode?.engine || (activeConnection?.engine === 'postgresql' ? 'pg_default' : activeConnection?.engine === 'mysql' ? 'InnoDB' : 'main');
+  const tablespace = selectedTableNode?.engine || defaultTablespace(activeConnection?.engine ?? 'postgresql');
   const oid = tableName !== 'N/A' ? `16${Math.abs(tableName.split('').reduce((a, b) => (a << 5) - a + b.charCodeAt(0), 0) % 9000 + 1000)}` : 'N/A';
   const acl = `arwdDxt/${owner}`;
 
@@ -145,7 +147,7 @@ export function InspectorSidebar({ store }: InspectorSidebarProps): JSX.Element 
                   </div>
                   <div className="cb-info-row">
                     <span className="cb-info-label">Data Type</span>
-                    <span className="cb-info-value font-mono text-accent">{String(selectedTarget.metadata?.type ?? 'TEXT')}</span>
+                    <span className="cb-info-value font-mono text-accent">{stringifyCell(selectedTarget.metadata?.type ?? 'TEXT')}</span>
                   </div>
                   <div className="cb-info-row">
                     <span className="cb-info-label">Primary Key</span>
@@ -157,7 +159,7 @@ export function InspectorSidebar({ store }: InspectorSidebarProps): JSX.Element 
                   </div>
                   <div className="cb-info-row">
                     <span className="cb-info-label">Default Value</span>
-                    <span className="cb-info-value font-mono">{String(selectedTarget.metadata?.default ?? 'NULL')}</span>
+                    <span className="cb-info-value font-mono">{stringifyCell(selectedTarget.metadata?.default ?? 'NULL')}</span>
                   </div>
                 </div>
               </section>

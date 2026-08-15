@@ -48,6 +48,11 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
 
   const tab = (tabs.find((t) => t.id === activeTabId) ?? tabs[0])!;
   const { columns, rows, hasMore, running, error, table, schema, sort, filters } = tab;
+  const [debouncedFilters, setDebouncedFilters] = useState(filters);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedFilters(filters), 150);
+    return () => clearTimeout(timer);
+  }, [filters]);
   const parentRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [newRow, setNewRow] = useState<Record<string, string>>({});
@@ -102,8 +107,8 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
   }, [columns, columnWidths, editable]);
 
   const visibleRows = useMemo(
-    () => filterRows(sortRows(rows, sort), filters),
-    [rows, sort, filters],
+    () => filterRows(sortRows(rows, sort), debouncedFilters),
+    [rows, sort, debouncedFilters],
   );
 
   const startIndex = (page - 1) * pageSize;
@@ -304,6 +309,7 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
                 const currentRow = visibleRows[formRowIdx] || {};
                 const val = currentRow[col.name];
                 const colSchema = schema.find((s) => s.name === col.name);
+                const actualIndex = rows.indexOf(currentRow);
 
                 return (
                   <div key={col.name} className="cb-form-field-row">
@@ -318,7 +324,7 @@ export function ResultGrid({ store }: { store: AppStore }): JSX.Element {
                       readOnly={!editable}
                       onChange={(e) => {
                         if (editable) {
-                          void updateCell(formRowIdx, col.name, e.target.value);
+                          void updateCell(actualIndex, col.name, e.target.value);
                         }
                       }}
                     />

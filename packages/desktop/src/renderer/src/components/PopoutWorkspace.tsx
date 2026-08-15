@@ -35,7 +35,7 @@ export function PopoutWorkspace({ client }: { client: Client }): JSX.Element {
     document.documentElement.setAttribute('data-theme', savedTheme);
     applyAccent(localStorage.getItem('accent') || '#6366f1');
     applyBgColor(getSavedBgColor(savedTheme), savedTheme);
-    initPersistedFonts();
+    void initPersistedFonts();
     applySavedSqlTheme();
   }, []);
 

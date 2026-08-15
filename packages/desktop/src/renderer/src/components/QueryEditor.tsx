@@ -3,6 +3,7 @@ import type { Suggestion } from '@canvabase/contracts';
 import type { AppStore } from '../store';
 import { highlightSql } from '../lib/sqlHighlighter';
 import { validateSql, type SqlDialect, type SqlDiagnostic } from '../lib/sqlValidator';
+import { toSqlDialect } from '../lib/dialect';
 import { FloatingWindow } from './FloatingWindow';
 import { ResultGrid } from './ResultGrid';
 
@@ -95,7 +96,7 @@ export function QueryEditor({ store }: { store: AppStore }): JSX.Element {
 
   // Active Connection Dialect
   const activeConn = connections.find((c) => c.id === activeConnectionId);
-  const dialect: SqlDialect = (activeConn?.engine as SqlDialect) || 'mysql';
+  const dialect: SqlDialect = toSqlDialect(activeConn?.engine ?? 'mysql');
 
   // Dialect-aware SQL Syntax Validation (Requirement 3.2)
   const diagnostics: SqlDiagnostic[] = useMemo(() => {

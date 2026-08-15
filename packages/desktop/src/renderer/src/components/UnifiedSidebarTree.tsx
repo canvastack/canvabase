@@ -1,6 +1,7 @@
 import { useState, type JSX, type MouseEvent } from 'react';
 import type { AppStore } from '../store';
 import type { ConnectionSummary, ObjectNode, TableColumn } from '@canvabase/contracts';
+import { defaultSchemaName as dialectDefaultSchema } from '../lib/dialect';
 
 interface UnifiedSidebarTreeProps {
   store: AppStore;
@@ -280,7 +281,7 @@ export function UnifiedSidebarTree({
                                 <div className="tree-children db-children">
                                   {/* Level 3.1: Schema Node (e.g. public, main, dbo) */}
                                   {(() => {
-                                    const defaultSchemaName = conn.engine === 'sqlite' ? 'main' : conn.engine === 'postgresql' ? 'public' : 'dbo';
+                                    const defaultSchemaName = dialectDefaultSchema(conn.engine);
                                     const isSchemaExpanded = !!expandedSchemas[defaultSchemaName];
                                     const activeTab = tabs.find((t) => t.id === activeTabId);
 

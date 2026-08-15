@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent, type JSX } from 'react';
 import type { AppStore } from '../store';
 import type { ConnectionSummary } from '@canvabase/contracts';
+import { defaultPort, defaultUsername } from '../lib/dialect';
 
 interface ConnectionModalProps {
   store: AppStore;
@@ -37,16 +38,16 @@ export function ConnectionModal({
 
   useEffect(() => {
     if (editConnection) {
-      const defaultUser = editConnection.username || (editConnection.engine === 'postgresql' ? 'postgres' : 'root');
+      const defaultUser = editConnection.username || defaultUsername(editConnection.engine);
       setForm({
         name: editConnection.name,
         engine: editConnection.engine,
         host: editConnection.host || 'localhost',
-        port: String(editConnection.port || (editConnection.engine === 'postgresql' ? 5432 : 3306)),
+        port: String(editConnection.port || defaultPort(editConnection.engine)),
         database: editConnection.database || '',
         username: defaultUser,
         password: '',
-        ssl: 'disabled',
+        ssl: editConnection.ssl ?? 'disabled',
       });
     } else {
       setForm({
@@ -107,6 +108,7 @@ export function ConnectionModal({
         port: Number(form.port) || 0,
         database: form.database,
         username: form.username,
+        ssl: form.ssl,
         ...(form.password ? { password: form.password } : {}),
       });
     } else {
@@ -118,6 +120,7 @@ export function ConnectionModal({
         database: form.database,
         username: form.username,
         password: form.password,
+        ssl: form.ssl,
       });
     }
     setSaving(false);

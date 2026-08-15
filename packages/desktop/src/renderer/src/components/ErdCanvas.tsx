@@ -22,6 +22,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import type { ErdGraph } from '@canvabase/contracts';
+import { erdGraphToDataUrl } from '../lib/erdSvgExport';
 import { ErdTableNode } from './erd/ErdTableNode';
 import { ErdSmartEdge } from './erd/ErdSmartEdge';
 import { ErdBottomToolbar } from './erd/ErdBottomToolbar';
@@ -124,10 +125,7 @@ function ErdCanvasInner({
     zoomIn: () => reactFlowInstance.zoomIn({ duration: 250 }),
     zoomOut: () => reactFlowInstance.zoomOut({ duration: 250 }),
     setPanMode: (isPan: boolean) => setPanMode(isPan),
-    getDataUrl: () => {
-      // Return canvas fallback representation
-      return `data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="100%" height="100%" fill="%230f1222"/><text x="20" y="40" fill="%23e6e8f2" font-size="18">CanvaBase ERD Diagram Export</text></svg>`;
-    },
+    getDataUrl: () => erdGraphToDataUrl(graph),
   }));
 
   const handleViewportChange = useCallback(() => {
