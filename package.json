@@ -1,6 +1,6 @@
 {
   "name": "canvabase",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "CanvaBase — cross-platform database management desktop app (MySQL, PostgreSQL, SQLite)",
   "license": "Apache-2.0",

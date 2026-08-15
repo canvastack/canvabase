@@ -1,6 +1,6 @@
 {
   "name": "@canvabase/desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "CanvaBase Database Management Desktop Client",
   "author": "CanvaStack",
   "license": "Apache-2.0",
@@ -51,9 +51,12 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
+      "artifactName": "${productName}-${version}-Setup-${arch}.${ext}",
       "icon": "src/renderer/src/assets/logo.png"
     },
     "nsis": {
