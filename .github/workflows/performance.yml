@@ -26,7 +26,7 @@ jobs:
         run: npx size-limit
 
       - name: Memory budget gate (idle <200MB, grid <400MB)
-        run: npm run measure
+        run: xvfb-run -a npm run measure
 
       - name: Grid benchmark (fps + heap)
         run: npm run test -- tests/performance
