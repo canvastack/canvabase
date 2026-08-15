@@ -239,7 +239,7 @@ async function main() {
   const electronPath = resolveElectron();
   const child = spawn(
     electronPath,
-    ['.', `--remote-debugging-port=${port}`],
+    ['.', `--remote-debugging-port=${port}`, '--no-sandbox'],
     { cwd: desktopDir, stdio: 'ignore', env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' } },
   );
 
