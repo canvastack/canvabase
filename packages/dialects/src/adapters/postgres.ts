@@ -29,7 +29,7 @@ function extractIndexColumns(indexdef: string): string[] {
 
 const capabilities: DialectCapabilities = {
   ssl: true,
-  sshTunnel: true,
+  sshTunnel: false,
   streaming: false,
   cancellation: true,
   editableGrid: true,

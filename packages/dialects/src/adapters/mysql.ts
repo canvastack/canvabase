@@ -21,7 +21,7 @@ import { formatDefault, primaryKeyColumns } from '../ddl.js';
 
 const capabilities: DialectCapabilities = {
   ssl: true,
-  sshTunnel: true,
+  sshTunnel: false,
   streaming: true,
   cancellation: true,
   editableGrid: true,
