@@ -40,6 +40,7 @@ export const connectionSummarySchema = z.object({
   host: z.string().optional(),
   port: z.number().int().positive().optional(),
   username: z.string().optional(),
+  ssl: sslModeSchema.optional(),
   status: z.enum(['connected', 'connecting', 'disconnected', 'error']),
 });
 
