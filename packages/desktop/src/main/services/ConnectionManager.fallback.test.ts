@@ -65,4 +65,24 @@ describe('ConnectionManager fallback (AES-256-GCM via KeychainCrypto)', () => {
     if (!list.ok) return;
     expect(list.data.length).toBe(1);
   });
+
+  it('delete mencatat audit log (UU PDP: penghapusan data koneksi)', async () => {
+    const created = await manager.create({
+      name: 'delete-audit',
+      engine: 'sqlite',
+      database: ':memory:',
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const del = await manager.delete(created.data.id);
+    expect(del.ok).toBe(true);
+
+    const raw = await readFile(join(dir, 'audit-log.json'), 'utf8');
+    const audit = JSON.parse(raw) as Array<{ action: string; target?: string; connectionId?: string }>;
+    const entry = audit.find((e) => e.action === 'connection.delete');
+    expect(entry).toBeDefined();
+    expect(entry?.target).toBe('delete-audit');
+    expect(entry?.connectionId).toBe(created.data.id);
+  });
 });

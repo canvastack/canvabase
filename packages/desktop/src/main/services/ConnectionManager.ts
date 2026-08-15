@@ -12,6 +12,7 @@ import { fail, ok } from '@canvabase/contracts';
 import type { DialectConnectionConfig, DialectPort } from '@canvabase/dialects';
 import { toClientError } from '../errors.js';
 import type { DialectRegistry } from './DialectRegistry.js';
+import { AuditLogger } from './AuditLogger.js';
 import { KeychainCrypto } from './KeychainCrypto.js';
 
 const DEFAULT_PORT: Record<Engine, number> = {
@@ -56,6 +57,7 @@ function toSummary(
     ...(conn.config.host ? { host: conn.config.host } : {}),
     ...(conn.config.port ? { port: conn.config.port } : {}),
     ...(conn.config.username ? { username: conn.config.username } : {}),
+    ...(conn.config.ssl ? { ssl: conn.config.ssl } : {}),
     status,
   };
 }
@@ -76,6 +78,7 @@ export class ConnectionManager {
   private readonly sessions = new Map<string, Session>();
   private readonly filePath: string;
   private readonly fallbackCrypto: KeychainCrypto;
+  private readonly audit: AuditLogger;
   private fallbackActive = false;
 
   constructor(
@@ -84,6 +87,7 @@ export class ConnectionManager {
   ) {
     this.filePath = join(dataDir, 'connections.json');
     this.fallbackCrypto = new KeychainCrypto(dataDir);
+    this.audit = new AuditLogger(dataDir);
   }
 
   /** True jika fallback AES-256-GCM sedang aktif (OS keychain tidak tersedia). */
@@ -183,8 +187,16 @@ export class ConnectionManager {
 
   async delete(id: string): Promise<Result<{ deleted: boolean }>> {
     await this.disconnect(id);
+    const conn = this.connections.get(id);
     const deleted = this.connections.delete(id);
     await this.persist();
+    if (deleted && conn) {
+      await this.audit.append({
+        action: 'connection.delete',
+        connectionId: id,
+        target: conn.config.name,
+      });
+    }
     return ok({ deleted });
   }
 
@@ -192,7 +204,12 @@ export class ConnectionManager {
     let fullConfig = input;
     if (!input.password && input.name) {
       const existing = [...this.connections.values()].find(
-        (c) => c.config.name === input.name || (c.config.host === input.host && c.config.port === input.port),
+        (c) =>
+          (c.config.name === input.name && c.config.engine === input.engine) ||
+          (c.config.host === input.host &&
+            c.config.port === input.port &&
+            c.config.username === input.username &&
+            c.config.engine === input.engine),
       );
       if (existing?.config.password) {
         fullConfig = { ...input, password: existing.config.password };
